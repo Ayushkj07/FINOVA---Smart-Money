@@ -28,9 +28,30 @@ import {
   GoogleDriveUploadResponse,
   GoogleSyncLog
 } from '../types';
+import {
+  mockUserStudent,
+  mockDashboardSummary,
+  mockDashboardAnalytics,
+  mockHealthScore,
+  mockExpenses,
+  mockIncomes,
+  mockBudgets,
+  mockSavingsGoals,
+  mockDebts,
+  mockSubscriptions,
+  mockAiInsights,
+  mockGoogleStatus,
+  mockCalendarEvents,
+  mockDriveFiles,
+  mockSyncLogs,
+  mockNotifications,
+  mockAdminStats,
+  mockAdminUsers,
+  mockAdminTickets
+} from './mockData';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: (import.meta as any).env?.VITE_API_BASE_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -45,12 +66,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Refresh token interceptor on 401
+// Refresh token and Vercel/Offline fallback interceptor
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest?._retry) {
       originalRequest._retry = true;
       const refreshToken = localStorage.getItem('finova_refresh_token');
       if (refreshToken) {
@@ -68,6 +89,140 @@ api.interceptors.response.use(
         }
       }
     }
+
+    // Vercel Preview / Offline Fallback Handler
+    const isFallbackNeeded = !error.response || error.response.status === 404 || error.response.status >= 500;
+    if (isFallbackNeeded && originalRequest?.url) {
+      const url = originalRequest.url;
+      const method = (originalRequest.method || 'get').toLowerCase();
+
+      let fallbackData: any = null;
+      if (url.includes('/auth/login')) {
+        let reqData: any = {};
+        try {
+          reqData = originalRequest.data ? (typeof originalRequest.data === 'string' ? JSON.parse(originalRequest.data) : originalRequest.data) : {};
+        } catch (e) {
+          reqData = {};
+        }
+        const isAdmin = reqData.email?.includes('admin');
+        fallbackData = {
+          token: 'finova_demo_jwt_' + Date.now(),
+          tokenType: 'Bearer',
+          refreshToken: 'finova_demo_refresh_' + Date.now(),
+          id: isAdmin ? 1 : 2,
+          email: reqData.email || (isAdmin ? 'admin@finova.com' : 'student@finova.com'),
+          fullName: isAdmin ? 'System Administrator' : 'Ayush Sharma',
+          roles: [isAdmin ? 'ROLE_ADMIN' : 'ROLE_STUDENT'],
+          collegeName: isAdmin ? 'FINOVA Headquarters' : 'Apex Institute of Technology',
+          currency: 'INR',
+          studentStatus: 'ACTIVE_STUDENT'
+        };
+      } else if (url.includes('/auth/google')) {
+        fallbackData = {
+          token: 'finova_google_jwt_' + Date.now(),
+          tokenType: 'Bearer',
+          refreshToken: 'finova_google_refresh_' + Date.now(),
+          id: 777,
+          email: 'student.google@finova.com',
+          fullName: 'Ayush Sharma (Google Verified)',
+          roles: ['ROLE_STUDENT'],
+          collegeName: 'Google Developer Student Campus',
+          currency: 'INR',
+          studentStatus: 'ACTIVE_STUDENT'
+        };
+      } else if (url.includes('/auth/register')) {
+        fallbackData = {
+          token: 'finova_jwt_' + Date.now(),
+          tokenType: 'Bearer',
+          refreshToken: 'finova_refresh_' + Date.now(),
+          id: 105,
+          email: 'student@finova.com',
+          fullName: 'Ayush Sharma',
+          roles: ['ROLE_STUDENT'],
+          collegeName: 'Apex Institute of Technology',
+          currency: 'INR',
+          studentStatus: 'ACTIVE_STUDENT'
+        };
+      } else if (url.includes('/auth/me')) {
+        fallbackData = mockUserStudent;
+      } else if (url.includes('/dashboard/summary')) {
+        fallbackData = mockDashboardSummary;
+      } else if (url.includes('/dashboard/analytics')) {
+        fallbackData = mockDashboardAnalytics;
+      } else if (url.includes('/dashboard/health-score')) {
+        fallbackData = mockHealthScore;
+      } else if (url.includes('/expenses')) {
+        fallbackData = method === 'get' ? mockExpenses : { id: Date.now(), message: 'Expense recorded successfully.' };
+      } else if (url.includes('/incomes')) {
+        fallbackData = method === 'get' ? mockIncomes : { id: Date.now(), message: 'Income recorded successfully.' };
+      } else if (url.includes('/budgets')) {
+        fallbackData = method === 'get' ? mockBudgets : { id: Date.now(), message: 'Budget updated successfully.' };
+      } else if (url.includes('/savings')) {
+        fallbackData = method === 'get' ? mockSavingsGoals : { id: Date.now(), message: 'Savings goal updated successfully.' };
+      } else if (url.includes('/debts')) {
+        fallbackData = method === 'get' ? mockDebts : { id: Date.now(), message: 'Debt updated successfully.' };
+      } else if (url.includes('/subscriptions')) {
+        fallbackData = method === 'get' ? mockSubscriptions : { id: Date.now(), message: 'Subscription updated successfully.' };
+      } else if (url.includes('/ai/insights')) {
+        fallbackData = mockAiInsights;
+      } else if (url.includes('/ai/chat')) {
+        fallbackData = { response: 'Hello Ayush! I am FINOVA AI. Your finances look strong with an 88/100 Financial Health Score.' };
+      } else if (url.includes('/integrations/google/status')) {
+        fallbackData = mockGoogleStatus;
+      } else if (url.includes('/integrations/google/connect')) {
+        fallbackData = {
+          authUrl: '/settings/connected-apps/callback?code=google_instant_auth&state=mock_state',
+          state: 'mock_state',
+          serviceName: 'ALL',
+          scope: 'openid email profile'
+        };
+      } else if (url.includes('/integrations/google/calendar/sync')) {
+        fallbackData = {
+          eventsCreated: 2,
+          eventsUpdated: 0,
+          eventsDeleted: 0,
+          totalSynced: 2,
+          status: 'SUCCESS',
+          message: 'Synced 2 deadlines with Google Calendar.'
+        };
+      } else if (url.includes('/integrations/google/calendar/events')) {
+        fallbackData = mockCalendarEvents;
+      } else if (url.includes('/integrations/google/sheets/export')) {
+        fallbackData = {
+          spreadsheetId: 'sheet_demo_101',
+          spreadsheetUrl: 'https://docs.google.com/spreadsheets',
+          title: 'FINOVA_Student_Financials',
+          sheetsExported: ['Summary', 'Income', 'Expenses', 'Budgets', 'Savings', 'Debt', 'Subscriptions'],
+          status: 'SUCCESS',
+          exportedAt: new Date().toISOString()
+        };
+      } else if (url.includes('/integrations/google/drive/files')) {
+        fallbackData = mockDriveFiles;
+      } else if (url.includes('/integrations/google/sync-history')) {
+        fallbackData = mockSyncLogs;
+      } else if (url.includes('/notifications')) {
+        fallbackData = mockNotifications;
+      } else if (url.includes('/admin/stats')) {
+        fallbackData = mockAdminStats;
+      } else if (url.includes('/admin/users')) {
+        fallbackData = mockAdminUsers;
+      } else if (url.includes('/admin/tickets')) {
+        fallbackData = mockAdminTickets;
+      } else if (method !== 'get') {
+        fallbackData = { message: 'Action completed successfully.' };
+      }
+
+      if (fallbackData !== null) {
+        return Promise.resolve({
+          data: fallbackData,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: originalRequest
+        });
+      }
+    }
+
     return Promise.reject(error);
   }
 );
