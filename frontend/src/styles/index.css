@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#FAFAFC] text-finova-text font-sans antialiased min-h-screen selection:bg-lavender-100 selection:text-primary;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E3DCFE;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B09FFB;
+}
+
+/* Premium white card styling */
+.finova-card {
+  @apply bg-white border border-finova-border rounded-card p-6 shadow-subtle transition-all duration-200;
+}
+
+.finova-card:hover {
+  @apply shadow-subtle-hover border-lavender-200;
+}
+
+.finova-btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-medium rounded-xl hover:bg-primary-hover active:scale-[0.99] transition-all duration-150 shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60 disabled:cursor-not-allowed;
+}
+
+.finova-btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-finova-text border border-finova-border font-medium rounded-xl hover:bg-secondary-bg hover:border-lavender-300 active:scale-[0.99] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-lavender-200;
+}
+
+.finova-badge-success {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sage-100 text-finova-success border border-sage-200;
+}
+
+.finova-badge-warning {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFF9ED] text-finova-warning border border-[#FDE6B8];
+}
+
+.finova-badge-danger {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FDF2F3] text-finova-danger border border-[#F9D2D5];
+}
+
+.finova-badge-primary {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-lavender-100 text-primary-dark border border-lavender-200;
+}

@@ -1,0 +1,63 @@
+# ==============================================================================
+# FINOVA – Official Git Ignore Configuration
+# Prevents large build artifacts (>25MB), dependencies, and secrets from uploading
+# ==============================================================================
+
+# 1. Backend Build Artifacts & Fat JARs (>25MB - exceeds GitHub limits)
+backend/target/
+**/target/
+*.jar
+*.war
+*.ear
+*.class
+
+# 2. Frontend Dependencies & Distribution (>100MB)
+frontend/node_modules/
+**/node_modules/
+frontend/dist/
+**/dist/
+frontend/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 3. Local Databases & Persistence Files
+data/
+*.mv.db
+*.trace.db
+*.db
+backend/data/
+
+# 4. Environment Variables & Secrets (Keep .env private!)
+.env
+.env.local
+.env.*.local
+*.env
+
+# 5. Local Development Tools (Portable Maven, etc.)
+tools/
+
+# 6. IDE & Editor Files
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.classpath
+.project
+.settings/
+
+# 7. Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 8. Logs & Uploads
+logs/
+*.log
+uploads/
+startup.log

@@ -1,0 +1,443 @@
+-- =====================================================================
+-- FINOVA DATABASE SCHEMA (MySQL 8.0)
+-- Smart Money. Smarter Future. - AI Personal Finance Platform
+-- =====================================================================
+
+CREATE DATABASE IF NOT EXISTS finova_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE finova_db;
+
+-- 1. ROLES TABLE
+CREATE TABLE IF NOT EXISTS roles (
+    id BIGINT AUTO-INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 2. USERS TABLE
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    verification_token VARCHAR(255),
+    reset_password_token VARCHAR(255),
+    reset_password_expiry TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_email (email)
+) ENGINE=InnoDB;
+
+-- 3. USER_ROLES JUNCTION TABLE
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 4. USER_PROFILES TABLE
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    college_name VARCHAR(150),
+    student_status VARCHAR(50) DEFAULT 'ACTIVE_STUDENT',
+    currency VARCHAR(10) DEFAULT 'INR',
+    avatar_url VARCHAR(500),
+    phone_number VARCHAR(30),
+    monthly_allowance DECIMAL(12, 2) DEFAULT 0.00,
+    financial_goal_summary VARCHAR(500),
+    timezone VARCHAR(50) DEFAULT 'Asia/Kolkata',
+    notification_email_enabled BOOLEAN DEFAULT TRUE,
+    notification_in_app_enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 5. REFRESH_TOKENS TABLE
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    token VARCHAR(500) NOT NULL UNIQUE,
+    expiry_date TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    revoked BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_refresh_token (token)
+) ENGINE=InnoDB;
+
+-- 6. EXPENSE_CATEGORIES TABLE
+CREATE TABLE IF NOT EXISTS expense_categories (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    icon VARCHAR(50) DEFAULT 'DollarSign',
+    color_hex VARCHAR(20) DEFAULT '#9B87F5',
+    is_system BOOLEAN DEFAULT TRUE,
+    user_id BIGINT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 7. INCOMES TABLE
+CREATE TABLE IF NOT EXISTS incomes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    date DATE NOT NULL,
+    payment_method VARCHAR(50) DEFAULT 'BANK_TRANSFER',
+    description TEXT,
+    is_recurring BOOLEAN DEFAULT FALSE,
+    recurrence_period VARCHAR(30) DEFAULT 'NONE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_income_user_date (user_id, date)
+) ENGINE=InnoDB;
+
+-- 8. EXPENSES TABLE
+CREATE TABLE IF NOT EXISTS expenses (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    category_id BIGINT NULL,
+    category_name VARCHAR(50) NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    date DATE NOT NULL,
+    payment_method VARCHAR(50) NOT NULL DEFAULT 'UPI',
+    description TEXT,
+    receipt_url VARCHAR(500),
+    is_recurring BOOLEAN DEFAULT FALSE,
+    recurrence_period VARCHAR(30) DEFAULT 'NONE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES expense_categories(id) ON DELETE SET NULL,
+    INDEX idx_expense_user_date (user_id, date),
+    INDEX idx_expense_category (user_id, category_name)
+) ENGINE=InnoDB;
+
+-- 9. BUDGETS TABLE
+CREATE TABLE IF NOT EXISTS budgets (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    month INT NOT NULL,
+    year INT NOT NULL,
+    total_budget_limit DECIMAL(12, 2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_user_month_year (user_id, month, year)
+) ENGINE=InnoDB;
+
+-- 10. BUDGET_CATEGORIES TABLE
+CREATE TABLE IF NOT EXISTS budget_categories (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    budget_id BIGINT NOT NULL,
+    category_name VARCHAR(50) NOT NULL,
+    limit_amount DECIMAL(12, 2) NOT NULL,
+    spent_amount DECIMAL(12, 2) DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 11. SAVINGS_GOALS TABLE
+CREATE TABLE IF NOT EXISTS savings_goals (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    target_amount DECIMAL(12, 2) NOT NULL,
+    current_amount DECIMAL(12, 2) DEFAULT 0.00,
+    target_date DATE NOT NULL,
+    category VARCHAR(50) DEFAULT 'GENERAL',
+    description TEXT,
+    status VARCHAR(30) DEFAULT 'IN_PROGRESS',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 12. SAVINGS_CONTRIBUTIONS TABLE
+CREATE TABLE IF NOT EXISTS savings_contributions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    savings_goal_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    contribution_date DATE NOT NULL,
+    notes VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (savings_goal_id) REFERENCES savings_goals(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 13. DEBTS TABLE (Borrow and Lend)
+CREATE TABLE IF NOT EXISTS debts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(30) NOT NULL, -- 'BORROWED' or 'LENT'
+    counterparty_name VARCHAR(100) NOT NULL,
+    counterparty_contact VARCHAR(100),
+    initial_amount DECIMAL(12, 2) NOT NULL,
+    outstanding_balance DECIMAL(12, 2) NOT NULL,
+    interest_rate DECIMAL(5, 2) DEFAULT 0.00,
+    due_date DATE,
+    description TEXT,
+    status VARCHAR(30) DEFAULT 'ACTIVE', -- 'ACTIVE', 'PAID', 'OVERDUE'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 14. DEBT_REPAYMENTS TABLE
+CREATE TABLE IF NOT EXISTS debt_repayments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    debt_id BIGINT NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    payment_date DATE NOT NULL,
+    notes VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 15. SUBSCRIPTIONS TABLE
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    billing_cycle VARCHAR(30) DEFAULT 'MONTHLY', -- 'MONTHLY', 'ANNUAL', 'WEEKLY'
+    category VARCHAR(50) DEFAULT 'ENTERTAINMENT',
+    next_renewal_date DATE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    reminder_days_before INT DEFAULT 3,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 16. RECURRING_TRANSACTIONS TABLE
+CREATE TABLE IF NOT EXISTS recurring_transactions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    type VARCHAR(20) NOT NULL, -- 'INCOME' or 'EXPENSE'
+    category VARCHAR(50) NOT NULL,
+    frequency VARCHAR(30) NOT NULL, -- 'DAILY', 'WEEKLY', 'MONTHLY'
+    next_execution_date DATE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 17. NOTIFICATIONS TABLE
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL, -- 'BUDGET_ALERT', 'BILL_REMINDER', 'GOAL_MILESTONE', 'AI_TIP', 'SYSTEM'
+    is_read BOOLEAN DEFAULT FALSE,
+    action_url VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_unread (user_id, is_read)
+) ENGINE=InnoDB;
+
+-- 18. FINANCIAL_REPORTS TABLE
+CREATE TABLE IF NOT EXISTS financial_reports (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    report_type VARCHAR(50) NOT NULL, -- 'MONTHLY', 'QUARTERLY', 'ANNUAL'
+    period_label VARCHAR(50) NOT NULL,
+    total_income DECIMAL(12, 2) NOT NULL,
+    total_expenses DECIMAL(12, 2) NOT NULL,
+    net_savings DECIMAL(12, 2) NOT NULL,
+    savings_rate DECIMAL(5, 2) NOT NULL,
+    summary_json JSON,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 19. FINANCIAL_CHALLENGES TABLE
+CREATE TABLE IF NOT EXISTS financial_challenges (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    description TEXT NOT NULL,
+    target_savings DECIMAL(12, 2) NOT NULL,
+    duration_days INT NOT NULL,
+    badge_name VARCHAR(100),
+    badge_icon VARCHAR(50),
+    category VARCHAR(50) DEFAULT 'GENERAL',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 20. CHALLENGE_PARTICIPANTS TABLE
+CREATE TABLE IF NOT EXISTS challenge_participants (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    challenge_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    current_progress DECIMAL(12, 2) DEFAULT 0.00,
+    status VARCHAR(30) DEFAULT 'IN_PROGRESS', -- 'IN_PROGRESS', 'COMPLETED', 'FAILED'
+    achieved_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (challenge_id) REFERENCES financial_challenges(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 21. EXPENSE_SPLITS TABLE
+CREATE TABLE IF NOT EXISTS expense_splits (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    creator_id BIGINT NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    total_amount DECIMAL(12, 2) NOT NULL,
+    split_type VARCHAR(30) DEFAULT 'EQUAL', -- 'EQUAL', 'EXACT', 'PERCENTAGE'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_settled BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 22. EXPENSE_SPLIT_MEMBERS TABLE
+CREATE TABLE IF NOT EXISTS expense_split_members (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    expense_split_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150),
+    owed_amount DECIMAL(12, 2) NOT NULL,
+    paid_amount DECIMAL(12, 2) DEFAULT 0.00,
+    is_paid BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (expense_split_id) REFERENCES expense_splits(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 23. FINANCIAL_JOURNAL TABLE
+CREATE TABLE IF NOT EXISTS financial_journal (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    entry_date DATE NOT NULL,
+    notes TEXT NOT NULL,
+    sentiment VARCHAR(30) DEFAULT 'NEUTRAL', -- 'PROUD', 'NEUTRAL', 'REGRETFUL', 'MOTIVATED'
+    category VARCHAR(50) DEFAULT 'GENERAL',
+    tags VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 24. SUPPORT_TICKETS & AUDIT_LOGS
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    subject VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    status VARCHAR(30) DEFAULT 'OPEN', -- 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'
+    priority VARCHAR(30) DEFAULT 'MEDIUM',
+    admin_response TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NULL,
+    action VARCHAR(100) NOT NULL,
+    entity_name VARCHAR(50),
+    entity_id BIGINT,
+    ip_address VARCHAR(50),
+    details TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- =====================================================================
+-- GOOGLE INTEGRATION SUITE (OAuth2, Calendar, Sheets, Drive, Gmail)
+-- =====================================================================
+
+-- 25. GOOGLE_ACCOUNTS TABLE
+CREATE TABLE IF NOT EXISTS google_accounts (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    google_user_id VARCHAR(100) NOT NULL UNIQUE,
+    google_email VARCHAR(150) NOT NULL,
+    profile_picture VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 26. GOOGLE_INTEGRATIONS TABLE
+CREATE TABLE IF NOT EXISTS google_integrations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    service_name VARCHAR(50) NOT NULL, -- 'AUTH', 'CALENDAR', 'SHEETS', 'DRIVE', 'GMAIL', 'MAPS'
+    connection_status VARCHAR(30) DEFAULT 'DISCONNECTED', -- 'CONNECTED', 'DISCONNECTED', 'ERROR'
+    scopes VARCHAR(1000),
+    last_sync_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_google_service (user_id, service_name),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 27. GOOGLE_OAUTH_TOKENS TABLE (AES-256-GCM Encrypted at Rest)
+CREATE TABLE IF NOT EXISTS google_oauth_tokens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL UNIQUE,
+    encrypted_access_token VARCHAR(2000) NOT NULL,
+    encrypted_refresh_token VARCHAR(2000),
+    expiry_date TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 28. GOOGLE_CALENDAR_EVENTS TABLE
+CREATE TABLE IF NOT EXISTS google_calendar_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    financial_record_id BIGINT NOT NULL,
+    google_event_id VARCHAR(150) NOT NULL,
+    event_type VARCHAR(50) NOT NULL, -- 'SUBSCRIPTION_RENEWAL', 'LOAN_REPAYMENT', 'BUDGET_REVIEW', 'SAVINGS_DEADLINE'
+    event_date DATE NOT NULL,
+    sync_status VARCHAR(30) DEFAULT 'SYNCED',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_record_type (user_id, financial_record_id, event_type),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 29. GOOGLE_DRIVE_FILES TABLE
+CREATE TABLE IF NOT EXISTS google_drive_files (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    google_file_id VARCHAR(150) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(50) NOT NULL, -- 'PDF_REPORT', 'EXCEL_REPORT', 'RECEIPT_ATTACHMENT'
+    folder_path VARCHAR(255),
+    file_size BIGINT,
+    web_link VARCHAR(500),
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 30. GOOGLE_SYNC_LOGS TABLE
+CREATE TABLE IF NOT EXISTS google_sync_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    service_name VARCHAR(50) NOT NULL,
+    sync_status VARCHAR(30) NOT NULL, -- 'SUCCESS', 'FAILED', 'PARTIAL', 'REVOKED'
+    error_message VARCHAR(1000),
+    details VARCHAR(2000),
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
