@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Wallet,
@@ -43,6 +43,7 @@ export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const [timeFilter, setTimeFilter] = useState('THIS_MONTH');
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
@@ -52,7 +53,11 @@ export const DashboardPage: React.FC = () => {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
 
-  const fetchDashboardData = async () => {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const fetchDashboardData = useCallback(async () => {
     try {
       const [sumRes, anaRes, healthRes] = await Promise.all([
         dashboardApi.getSummary(timeFilter),
@@ -72,20 +77,28 @@ export const DashboardPage: React.FC = () => {
         aiApi.getInsights(),
       ]);
 
-      if (expRes.status === 'fulfilled') setRecentExpenses(expRes.value.data.slice(0, 5));
-      if (savRes.status === 'fulfilled') setSavingsGoals(savRes.value.data.slice(0, 3));
-      if (debtRes.status === 'fulfilled') setDebts(debtRes.value.data.filter(d => d.status === 'ACTIVE').slice(0, 3));
-      if (aiRes.status === 'fulfilled') setAiInsights(aiRes.value.data);
+      if (expRes.status === 'fulfilled' && Array.isArray(expRes.value.data)) {
+        setRecentExpenses(expRes.value.data.slice(0, 5));
+      }
+      if (savRes.status === 'fulfilled' && Array.isArray(savRes.value.data)) {
+        setSavingsGoals(savRes.value.data.slice(0, 3));
+      }
+      if (debtRes.status === 'fulfilled' && Array.isArray(debtRes.value.data)) {
+        setDebts(debtRes.value.data.filter(d => d.status === 'ACTIVE').slice(0, 3));
+      }
+      if (aiRes.status === 'fulfilled' && aiRes.value.data) {
+        setAiInsights(aiRes.value.data);
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [timeFilter]);
 
   useEffect(() => {
     fetchDashboardData();
-  }, [timeFilter]);
+  }, [fetchDashboardData]);
 
   useOnRealtimeUpdate(fetchDashboardData);
 
@@ -315,37 +328,43 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={analytics?.incomeVsExpenseTrend || [
-                  { label: 'W1', income: 6000, expense: 2200 },
-                  { label: 'W2', income: 7000, expense: 3400 },
-                  { label: 'W3', income: 6500, expense: 2800 },
-                  { label: 'W4', income: 8000, expense: 3100 },
-                ]}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#A8C9B5" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#A8C9B5" stopOpacity={0.0} />
-                  </linearGradient>
-                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#9B87F5" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#9B87F5" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEEEF2" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(val: any) => [formatCurrency(Number(val)), '']}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
-                />
-                <Area type="monotone" dataKey="income" stroke="#65A982" strokeWidth={2} fillOpacity={1} fill="url(#colorIncome)" />
-                <Area type="monotone" dataKey="expense" stroke="#9B87F5" strokeWidth={2} fillOpacity={1} fill="url(#colorExpense)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {mounted ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart
+                  data={analytics?.incomeVsExpenseTrend && analytics.incomeVsExpenseTrend.length > 0 ? analytics.incomeVsExpenseTrend : [
+                    { label: 'W1', income: 6000, expense: 2200 },
+                    { label: 'W2', income: 7000, expense: 3400 },
+                    { label: 'W3', income: 6500, expense: 2800 },
+                    { label: 'W4', income: 8000, expense: 3100 },
+                  ]}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#A8C9B5" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#A8C9B5" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#9B87F5" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#9B87F5" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEEEF2" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(val: any) => [formatCurrency(Number(val)), '']}
+                    contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
+                  />
+                  <Area type="monotone" dataKey="income" stroke="#65A982" strokeWidth={2} fillOpacity={1} fill="url(#colorIncome)" />
+                  <Area type="monotone" dataKey="expense" stroke="#9B87F5" strokeWidth={2} fillOpacity={1} fill="url(#colorExpense)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse flex items-center justify-center text-xs text-finova-muted">
+                Loading trend analytics...
+              </div>
+            )}
           </div>
         </div>
 
@@ -356,35 +375,44 @@ export const DashboardPage: React.FC = () => {
             <p className="text-xs text-finova-muted">Where your money went this period</p>
           </div>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={
-                    analytics?.expenseCategoryBreakdown?.length
-                      ? analytics.expenseCategoryBreakdown
-                      : [
-                          { name: 'Food & Dining', value: 3500 },
-                          { name: 'Transportation', value: 1200 },
-                          { name: 'Education', value: 1800 },
-                          { name: 'Entertainment', value: 1000 },
-                          { name: 'Subscriptions', value: 800 },
-                        ]
-                  }
-                  innerRadius={60}
-                  outerRadius={85}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {(analytics?.expenseCategoryBreakdown || [1, 2, 3, 4, 5]).map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(val: any) => [formatCurrency(Number(val)), 'Amount']}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            {mounted ? (
+              (() => {
+                const pieData = analytics?.expenseCategoryBreakdown && analytics.expenseCategoryBreakdown.length > 0
+                  ? analytics.expenseCategoryBreakdown
+                  : [
+                      { name: 'Food & Dining', value: 3500 },
+                      { name: 'Transportation', value: 1200 },
+                      { name: 'Education', value: 1800 },
+                      { name: 'Entertainment', value: 1000 },
+                      { name: 'Subscriptions', value: 800 },
+                    ];
+                return (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        innerRadius={60}
+                        outerRadius={85}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {pieData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(val: any) => [formatCurrency(Number(val)), 'Amount']}
+                        contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                );
+              })()
+            ) : (
+              <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse flex items-center justify-center text-xs text-finova-muted">
+                Loading category breakdown...
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -462,12 +490,12 @@ export const DashboardPage: React.FC = () => {
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{
-                          width: `${Math.min(100, (goal.currentAmount / goal.targetAmount) * 100)}%`,
+                          width: `${Math.min(100, Math.max(0, goal.targetAmount > 0 ? (goal.currentAmount / goal.targetAmount) * 100 : 0))}%`,
                         }}
                       />
                     </div>
                     <span className="text-[10px] text-finova-muted mt-1.5 block">
-                      {Math.round((goal.currentAmount / goal.targetAmount) * 100)}% reached • Target: {formatDate(goal.targetDate)}
+                      {goal.targetAmount > 0 ? Math.round((goal.currentAmount / goal.targetAmount) * 100) : 0}% reached • Target: {formatDate(goal.targetDate)}
                     </span>
                   </div>
                 ))

@@ -34,8 +34,13 @@ import { formatCurrency } from '../utils/formatters';
 export const AnalyticsPage: React.FC = () => {
   const [period, setPeriod] = useState('MONTHLY');
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -174,26 +179,32 @@ export const AnalyticsPage: React.FC = () => {
             <p className="text-xs text-finova-muted">Distribution across consecutive weeks / intervals</p>
           </div>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={analytics?.monthlySpendingTrend || [
-                  { period: 'Week 1', amount: 2400 },
-                  { period: 'Week 2', amount: 3100 },
-                  { period: 'Week 3', amount: 1950 },
-                  { period: 'Week 4', amount: 2800 },
-                ]}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEEEF2" />
-                <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(val: any) => [formatCurrency(Number(val)), 'Spent']}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
-                />
-                <Bar dataKey="amount" fill="#9B87F5" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {mounted ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart
+                  data={analytics?.monthlySpendingTrend && analytics.monthlySpendingTrend.length > 0 ? analytics.monthlySpendingTrend : [
+                    { period: 'Week 1', amount: 2400 },
+                    { period: 'Week 2', amount: 3100 },
+                    { period: 'Week 3', amount: 1950 },
+                    { period: 'Week 4', amount: 2800 },
+                  ]}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEEEF2" />
+                  <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(val: any) => [formatCurrency(Number(val)), 'Spent']}
+                    contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="amount" fill="#9B87F5" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse flex items-center justify-center text-xs text-finova-muted">
+                Loading outflow trend...
+              </div>
+            )}
           </div>
         </div>
 
@@ -204,35 +215,44 @@ export const AnalyticsPage: React.FC = () => {
             <p className="text-xs text-finova-muted">Visualizing lifestyle vs. essential student spending</p>
           </div>
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={
-                    analytics?.expenseCategoryBreakdown?.length
-                      ? analytics.expenseCategoryBreakdown
-                      : [
-                          { name: 'Food', value: 4500 },
-                          { name: 'Transportation', value: 1500 },
-                          { name: 'Education', value: 2000 },
-                          { name: 'Shopping', value: 1200 },
-                        ]
-                  }
-                  innerRadius={55}
-                  outerRadius={80}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {(analytics?.expenseCategoryBreakdown || [1, 2, 3, 4]).map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(val: any) => [formatCurrency(Number(val)), 'Amount']}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
-                />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-              </PieChart>
-            </ResponsiveContainer>
+            {mounted ? (
+              (() => {
+                const pieData = analytics?.expenseCategoryBreakdown && analytics.expenseCategoryBreakdown.length > 0
+                  ? analytics.expenseCategoryBreakdown
+                  : [
+                      { name: 'Food', value: 4500 },
+                      { name: 'Transportation', value: 1500 },
+                      { name: 'Education', value: 2000 },
+                      { name: 'Shopping', value: 1200 },
+                    ];
+                return (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {pieData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(val: any) => [formatCurrency(Number(val)), 'Amount']}
+                        contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
+                      />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                );
+              })()
+            ) : (
+              <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse flex items-center justify-center text-xs text-finova-muted">
+                Loading proportion breakdown...
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -244,29 +264,35 @@ export const AnalyticsPage: React.FC = () => {
           <p className="text-xs text-finova-muted">Progress across all active student goals and vaults</p>
         </div>
         <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={analytics?.savingsGrowthTrend || [
-                { label: 'Jan', savings: 3000, income: 15000, expense: 9000 },
-                { label: 'Feb', savings: 6500, income: 16000, expense: 9500 },
-                { label: 'Mar', savings: 10200, income: 17500, expense: 11000 },
-                { label: 'Apr', savings: 14750, income: 18000, expense: 10500 },
-              ]}
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEEEF2" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
-              <Tooltip
-                formatter={(val: any) => [formatCurrency(Number(val)), '']}
-                contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
-              />
-              <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
-              <Line type="monotone" dataKey="savings" stroke="#9B87F5" strokeWidth={3} dot={{ r: 4 }} name="Total Savings Stash" />
-              <Line type="monotone" dataKey="income" stroke="#65A982" strokeWidth={2} strokeDasharray="4 4" name="Monthly Inflows" />
-              <Line type="monotone" dataKey="expense" stroke="#DF858B" strokeWidth={2} strokeDasharray="4 4" name="Monthly Expenses" />
-            </LineChart>
-          </ResponsiveContainer>
+          {mounted ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart
+                data={analytics?.savingsGrowthTrend && analytics.savingsGrowthTrend.length > 0 ? analytics.savingsGrowthTrend : [
+                  { label: 'Jan', savings: 3000, income: 15000, expense: 9000 },
+                  { label: 'Feb', savings: 6500, income: 16000, expense: 9500 },
+                  { label: 'Mar', savings: 10200, income: 17500, expense: 11000 },
+                  { label: 'Apr', savings: 14750, income: 18000, expense: 10500 },
+                ]}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEEEF2" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#858392' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(val: any) => [formatCurrency(Number(val)), '']}
+                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #EEEEF2', fontSize: '12px' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
+                <Line type="monotone" dataKey="savings" stroke="#9B87F5" strokeWidth={3} dot={{ r: 4 }} name="Total Savings Stash" />
+                <Line type="monotone" dataKey="income" stroke="#65A982" strokeWidth={2} strokeDasharray="4 4" name="Monthly Inflows" />
+                <Line type="monotone" dataKey="expense" stroke="#DF858B" strokeWidth={2} strokeDasharray="4 4" name="Monthly Expenses" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full w-full rounded-xl bg-slate-50 animate-pulse flex items-center justify-center text-xs text-finova-muted">
+              Loading savings trajectory...
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -18,26 +18,43 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('finova_user');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('finova_user');
+      return saved && saved !== 'undefined' ? JSON.parse(saved) : null;
+    } catch {
+      localStorage.removeItem('finova_user');
+      return null;
+    }
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('finova_token'));
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const savedToken = localStorage.getItem('finova_token');
+    const savedUser = localStorage.getItem('finova_user');
+    return Boolean(savedToken && (!savedUser || savedUser === 'undefined'));
+  });
 
   useEffect(() => {
+    let isMounted = true;
     const initAuth = async () => {
       if (token) {
         try {
           const res = await authApi.getProfile();
-          setUser(res.data);
-          localStorage.setItem('finova_user', JSON.stringify(res.data));
+          if (isMounted && res.data) {
+            setUser(res.data);
+            localStorage.setItem('finova_user', JSON.stringify(res.data));
+          }
         } catch (err) {
           // Keep cached user if offline or network glitch
         }
       }
-      setIsLoading(false);
+      if (isMounted) {
+        setIsLoading(false);
+      }
     };
     initAuth();
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
 
   const login = async (data: any): Promise<AuthResponse> => {

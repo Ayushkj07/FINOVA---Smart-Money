@@ -52,6 +52,7 @@ import {
 
 const api = axios.create({
   baseURL: (import.meta as any).env?.VITE_API_BASE_URL || '/api',
+  timeout: 4000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -144,7 +145,12 @@ api.interceptors.response.use(
           studentStatus: 'ACTIVE_STUDENT'
         };
       } else if (url.includes('/auth/me')) {
-        fallbackData = mockUserStudent;
+        let savedUser: any = null;
+        try {
+          const raw = localStorage.getItem('finova_user');
+          if (raw && raw !== 'undefined') savedUser = JSON.parse(raw);
+        } catch (e) {}
+        fallbackData = savedUser || mockUserStudent;
       } else if (url.includes('/dashboard/summary')) {
         fallbackData = mockDashboardSummary;
       } else if (url.includes('/dashboard/analytics')) {
@@ -200,6 +206,8 @@ api.interceptors.response.use(
         fallbackData = mockDriveFiles;
       } else if (url.includes('/integrations/google/sync-history')) {
         fallbackData = mockSyncLogs;
+      } else if (url.includes('/notifications/unread/count')) {
+        fallbackData = { unreadCount: 2 };
       } else if (url.includes('/notifications')) {
         fallbackData = mockNotifications;
       } else if (url.includes('/admin/stats')) {
