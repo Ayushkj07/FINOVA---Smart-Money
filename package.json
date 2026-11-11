@@ -4,6 +4,8 @@
   "private": true,
   "description": "FINOVA - Smart Money Management for College Students",
   "scripts": {
+    "start": "java -jar backend/target/finova-backend-1.0.0.jar",
+    "server": "java -jar backend/target/finova-backend-1.0.0.jar",
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"

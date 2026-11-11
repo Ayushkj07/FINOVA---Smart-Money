@@ -8,7 +8,7 @@ spring:
     name: finova-backend
 
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:mysql}
+    active: ${SPRING_PROFILES_ACTIVE:h2}
 
   servlet:
     multipart:
