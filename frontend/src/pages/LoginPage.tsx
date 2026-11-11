@@ -2,40 +2,64 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { googleApi } from '../services/api';
-import { Lock, Mail, ArrowRight, AlertCircle, Sparkles, UserCheck } from 'lucide-react';
+import { Lock, Mail, ArrowRight, AlertCircle, Sparkles, UserCheck, Check } from 'lucide-react';
+import { GoogleAccountModal, GoogleProfile } from '../components/common/GoogleAccountModal';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
   const { login, googleLogin } = useAuth();
   const navigate = useNavigate();
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleClick = async () => {
+    setError(null);
+    try {
+      setLoading(true);
+      // Check if real Google Cloud OAuth is configured
+      const res = await googleApi.getConnectUrl('AUTH');
+      const url = res.data?.authUrl;
+      if (
+        url &&
+        url.startsWith('https://accounts.google.com') &&
+        !url.includes('client_id=&') &&
+        !url.includes('client_id=YOUR_') &&
+        !url.includes('client_id=%24%7B')
+      ) {
+        window.location.href = url;
+        return;
+      }
+    } catch {
+      // Fallback to Google Account Switcher Modal
+    } finally {
+      setLoading(false);
+    }
+
+    // Open multi-account Google selection modal
+    setShowGoogleModal(true);
+  };
+
+  const handleSelectGoogleAccount = async (account: GoogleProfile) => {
     try {
       setLoading(true);
       setError(null);
-      try {
-        const res = await googleApi.getConnectUrl('AUTH');
-        const url = res.data?.authUrl;
-        if (
-          url &&
-          url.startsWith('https://accounts.google.com') &&
-          !url.includes('client_id=&') &&
-          !url.includes('client_id=YOUR_')
-        ) {
-          window.location.href = url;
-          return;
-        }
-      } catch (e) {
-        // Fall back to instant Google sign-in
-      }
+      const auth = await googleLogin({
+        email: account.email,
+        fullName: account.fullName,
+        sub: account.sub,
+        picture: account.picture,
+      });
 
-      await googleLogin({ code: 'google_instant_auth' });
-      navigate('/dashboard');
+      if (auth.roles && auth.roles.includes('ROLE_ADMIN')) {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
-      setError(err?.message || 'Google Sign-In failed. Please try again.');
+      setError(err?.response?.data?.message || err?.message || 'Google Sign-In failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -47,14 +71,20 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const auth = await login({ email, password });
+      const auth = await login({ email: email.trim(), password });
+      if (rememberMe) {
+        localStorage.setItem('finova_remember_email', email.trim());
+      } else {
+        localStorage.removeItem('finova_remember_email');
+      }
+
       if (auth.roles && auth.roles.includes('ROLE_ADMIN')) {
         navigate('/admin');
       } else {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid email or password. Please try again.');
+      setError(err.response?.data?.message || 'Invalid email or password. Please verify your credentials.');
     } finally {
       setLoading(false);
     }
@@ -73,7 +103,7 @@ export const LoginPage: React.FC = () => {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setError('Unable to sign in. Please try again.');
+      setError(err.response?.data?.message || 'Unable to sign in with demo credentials.');
     } finally {
       setLoading(false);
     }
@@ -82,8 +112,8 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-secondary-bg flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <Link to="/" className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-md shadow-primary/20">
+        <Link to="/" className="flex items-center justify-center gap-3 mb-6 group">
+          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-md shadow-primary/20 group-hover:scale-105 transition-transform">
             <span className="text-white font-black text-2xl tracking-wider">F</span>
           </div>
           <span className="font-extrabold text-2xl tracking-tight text-finova-text">FINOVA</span>
@@ -99,16 +129,16 @@ export const LoginPage: React.FC = () => {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-sm border border-finova-border rounded-2xl sm:px-10">
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-xs text-finova-danger font-medium">
+            <div className="mb-5 p-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-xs text-finova-danger font-medium animate-shake">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-xs font-bold text-finova-text uppercase tracking-wider mb-2">
-                College or Student Email
+              <label className="block text-xs font-bold text-finova-text uppercase tracking-wider mb-1.5">
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-finova-muted absolute left-3.5 top-3.5" />
@@ -117,14 +147,14 @@ export const LoginPage: React.FC = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="student@finova.com"
+                  placeholder="name@college.edu"
                   className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-finova-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-finova-text bg-white"
                 />
               </div>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-finova-text uppercase tracking-wider">
                   Password
                 </label>
@@ -146,6 +176,19 @@ export const LoginPage: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-finova-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-finova-text bg-white"
                 />
               </div>
+            </div>
+
+            {/* Remember Me Checkbox */}
+            <div className="flex items-center justify-between py-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded text-primary focus:ring-primary border-slate-300 accent-primary cursor-pointer"
+                />
+                <span className="text-xs text-finova-muted font-medium">Remember me on this device</span>
+              </label>
             </div>
 
             <button
@@ -174,9 +217,9 @@ export const LoginPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={handleGoogleLogin}
+              onClick={handleGoogleClick}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl border border-finova-border bg-white hover:bg-slate-50 text-finova-text text-xs font-bold transition-all shadow-sm hover:border-slate-300"
+              className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl border border-finova-border bg-white hover:bg-slate-50 text-finova-text text-xs font-bold transition-all shadow-sm hover:border-slate-300 group"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -221,6 +264,14 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* Google Account Chooser Modal */}
+      <GoogleAccountModal
+        isOpen={showGoogleModal}
+        onClose={() => setShowGoogleModal(false)}
+        onSelectAccount={handleSelectGoogleAccount}
+        title="Sign in with Google"
+      />
     </div>
   );
 };

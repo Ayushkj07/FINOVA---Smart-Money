@@ -8,11 +8,12 @@ import com.finova.exception.ResourceNotFoundException;
 import com.finova.repository.*;
 import com.finova.security.JwtTokenProvider;
 import com.finova.service.AuthService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class AuthServiceImpl implements AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
 
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
@@ -35,17 +38,37 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.jwt.refresh-expiration-ms:604800000}")
     private long refreshExpirationInMs;
 
+    public AuthServiceImpl(AuthenticationManager authenticationManager,
+                           UserRepository userRepository,
+                           RoleRepository roleRepository,
+                           UserProfileRepository userProfileRepository,
+                           RefreshTokenRepository refreshTokenRepository,
+                           PasswordEncoder passwordEncoder,
+                           JwtTokenProvider tokenProvider) {
+        this.authenticationManager = authenticationManager;
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.userProfileRepository = userProfileRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.tokenProvider = tokenProvider;
+    }
+
     @Override
     @Transactional
     public AuthResponse login(LoginRequest request) {
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(request.getEmail().toLowerCase().trim(), request.getPassword())
         );
 
         String jwt = tokenProvider.generateToken(authentication);
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + request.getEmail()));
+
+        // Update last login timestamp
+        user.setLastLogin(Instant.now());
+        userRepository.save(user);
 
         // Create or rotate refresh token
         String refreshTokenStr = UUID.randomUUID().toString();
@@ -54,6 +77,7 @@ public class AuthServiceImpl implements AuthService {
                 .user(user)
                 .token(refreshTokenStr)
                 .expiryDate(Instant.now().plusMillis(refreshExpirationInMs))
+                .revoked(false)
                 .build();
         refreshTokenRepository.save(refreshToken);
 
@@ -65,6 +89,7 @@ public class AuthServiceImpl implements AuthService {
 
         return AuthResponse.builder()
                 .token(jwt)
+                .tokenType("Bearer")
                 .refreshToken(refreshTokenStr)
                 .id(user.getId())
                 .email(user.getEmail())
@@ -83,8 +108,9 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Passwords do not match");
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BadRequestException("Email is already registered");
+        String email = request.getEmail().toLowerCase().trim();
+        if (userRepository.existsByEmail(email)) {
+            throw new BadRequestException("An account with this email address already exists. Please sign in instead.");
         }
 
         Role studentRole = roleRepository.findByName(RoleType.ROLE_STUDENT)
@@ -93,12 +119,17 @@ public class AuthServiceImpl implements AuthService {
                         .description("Student role")
                         .build()));
 
+        String verificationToken = UUID.randomUUID().toString();
+
         User user = User.builder()
-                .fullName(request.getFullName())
-                .email(request.getEmail().toLowerCase().trim())
+                .fullName(request.getFullName().trim())
+                .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .isActive(true)
-                .isVerified(true) // Auto-verified for seamless student onboarding
+                .isVerified(true) // Verified and active for immediate student access
+                .accountStatus("ACTIVE")
+                .lastLogin(Instant.now())
+                .verificationToken(verificationToken)
                 .roles(Collections.singleton(studentRole))
                 .build();
 
@@ -106,9 +137,12 @@ public class AuthServiceImpl implements AuthService {
 
         UserProfile profile = UserProfile.builder()
                 .user(user)
-                .collegeName(request.getCollegeName())
+                .collegeName(request.getCollegeName() != null ? request.getCollegeName().trim() : "Campus University")
                 .studentStatus(request.getStudentStatus() != null ? request.getStudentStatus() : "ACTIVE_STUDENT")
                 .currency(request.getCurrency() != null ? request.getCurrency() : "INR")
+                .timezone("Asia/Kolkata")
+                .notificationEmailEnabled(true)
+                .notificationInAppEnabled(true)
                 .build();
         userProfileRepository.save(profile);
         user.setProfile(profile);
@@ -122,11 +156,15 @@ public class AuthServiceImpl implements AuthService {
                 .user(user)
                 .token(refreshTokenStr)
                 .expiryDate(Instant.now().plusMillis(refreshExpirationInMs))
+                .revoked(false)
                 .build();
         refreshTokenRepository.save(refreshToken);
 
+        log.info("New student registered successfully: id={}, email={}", user.getId(), user.getEmail());
+
         return AuthResponse.builder()
                 .token(jwt)
+                .tokenType("Bearer")
                 .refreshToken(refreshTokenStr)
                 .id(user.getId())
                 .email(user.getEmail())
@@ -136,6 +174,22 @@ public class AuthServiceImpl implements AuthService {
                 .currency(profile.getCurrency())
                 .studentStatus(profile.getStudentStatus())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void verifyEmail(String token) {
+        if (token == null || token.isBlank()) {
+            throw new BadRequestException("Verification token is required");
+        }
+        User user = userRepository.findByVerificationToken(token)
+                .orElseThrow(() -> new BadRequestException("Invalid or expired verification token"));
+
+        user.setIsVerified(true);
+        user.setVerificationToken(null);
+        user.setAccountStatus("ACTIVE");
+        userRepository.save(user);
+        log.info("Email verified successfully for user: {}", user.getEmail());
     }
 
     @Override
@@ -166,6 +220,7 @@ public class AuthServiceImpl implements AuthService {
 
         return AuthResponse.builder()
                 .token(newJwt)
+                .tokenType("Bearer")
                 .refreshToken(newRefreshTokenStr)
                 .id(user.getId())
                 .email(user.getEmail())
@@ -247,7 +302,7 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+        if (user.getPassword() != null && !passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             throw new BadRequestException("Current password is incorrect");
         }
 
@@ -284,17 +339,4 @@ public class AuthServiceImpl implements AuthService {
         user.setResetPasswordExpiry(null);
         userRepository.save(user);
     }
-
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthServiceImpl.class);
-
-    public AuthServiceImpl(AuthenticationManager authenticationManager, UserRepository userRepository, RoleRepository roleRepository, UserProfileRepository userProfileRepository, RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder, JwtTokenProvider tokenProvider) {
-        this.authenticationManager = authenticationManager;
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.userProfileRepository = userProfileRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.tokenProvider = tokenProvider;
-    }
-
 }

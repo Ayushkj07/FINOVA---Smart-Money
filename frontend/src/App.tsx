@@ -77,6 +77,9 @@ export const App: React.FC = () => {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/settings/connected-apps/callback" element={<GoogleCallbackPage />} />
+            <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+            <Route path="/google-callback" element={<GoogleCallbackPage />} />
+            <Route path="/callback" element={<GoogleCallbackPage />} />
 
             {/* Protected Application Routes under AppLayout */}
             <Route

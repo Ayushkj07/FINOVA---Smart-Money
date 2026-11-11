@@ -3,6 +3,7 @@ package com.finova.integration.google.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finova.dto.auth.AuthResponse;
+import com.finova.entity.OAuthAccount;
 import com.finova.entity.RefreshToken;
 import com.finova.entity.Role;
 import com.finova.entity.enums.RoleType;
@@ -23,6 +24,7 @@ import com.finova.integration.google.repository.GoogleAccountRepository;
 import com.finova.integration.google.repository.GoogleIntegrationRepository;
 import com.finova.integration.google.repository.GoogleOAuthTokenRepository;
 import com.finova.integration.google.repository.GoogleSyncLogRepository;
+import com.finova.repository.OAuthAccountRepository;
 import com.finova.repository.RefreshTokenRepository;
 import com.finova.repository.RoleRepository;
 import com.finova.repository.UserProfileRepository;
@@ -57,6 +59,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
     private final GoogleIntegrationRepository googleIntegrationRepository;
     private final GoogleOAuthTokenRepository googleOAuthTokenRepository;
     private final GoogleSyncLogRepository googleSyncLogRepository;
+    private final OAuthAccountRepository oauthAccountRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final UserProfileRepository userProfileRepository;
@@ -82,6 +85,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
                                  GoogleIntegrationRepository googleIntegrationRepository,
                                  GoogleOAuthTokenRepository googleOAuthTokenRepository,
                                  GoogleSyncLogRepository googleSyncLogRepository,
+                                 OAuthAccountRepository oauthAccountRepository,
                                  UserRepository userRepository,
                                  RoleRepository roleRepository,
                                  UserProfileRepository userProfileRepository,
@@ -92,6 +96,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         this.googleIntegrationRepository = googleIntegrationRepository;
         this.googleOAuthTokenRepository = googleOAuthTokenRepository;
         this.googleSyncLogRepository = googleSyncLogRepository;
+        this.oauthAccountRepository = oauthAccountRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.userProfileRepository = userProfileRepository;
@@ -164,8 +169,8 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
                 refreshToken = "mock_google_refresh_token_" + UUID.randomUUID();
                 expiresIn = 3600;
                 scope = getScopeForService(service);
-                googleUserId = "google_user_verified_101";
-                googleEmail = user.getEmail() != null ? user.getEmail() : "student.google@finova.com";
+                googleUserId = "google_user_sub_" + user.getId();
+                googleEmail = user.getEmail();
                 profilePic = "https://lh3.googleusercontent.com/a/default-user";
             } else {
                 // Exchange authorization code for Google tokens
@@ -192,6 +197,13 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
             account.setProfilePicture(profilePic);
             account.setUpdatedAt(Instant.now());
             googleAccountRepository.save(account);
+
+            // Save or update OAuthAccount
+            OAuthAccount oauthAccount = oauthAccountRepository.findByUserAndProvider(user, "GOOGLE")
+                    .orElse(new OAuthAccount(null, user, "GOOGLE", googleUserId, googleEmail, Instant.now()));
+            oauthAccount.setProviderUserId(googleUserId);
+            oauthAccount.setProviderEmail(googleEmail);
+            oauthAccountRepository.save(oauthAccount);
 
             // Save or update encrypted GoogleOAuthToken
             String encryptedAccess = tokenEncryptionService.encrypt(accessToken);
@@ -299,6 +311,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         }
 
         googleAccountRepository.findByUser(user).ifPresent(googleAccountRepository::delete);
+        oauthAccountRepository.deleteByUserAndProvider(user, "GOOGLE");
 
         googleSyncLogRepository.save(new GoogleSyncLog(
                 null, user, "AUTH", "REVOKED", null, "All Google authorizations were permanently revoked.", Instant.now()
@@ -308,34 +321,34 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
     @Override
     public String getValidAccessToken(Long userId) {
         User user = userRepository.findById(userId)
-                .orElse(null);
-        if (user == null) return null;
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
-        Optional<GoogleOAuthToken> tokenOpt = googleOAuthTokenRepository.findByUser(user);
-        if (tokenOpt.isEmpty()) {
-            return null;
-        }
-        GoogleOAuthToken oauthToken = tokenOpt.get();
+        GoogleOAuthToken token = googleOAuthTokenRepository.findByUser(user)
+                .orElseThrow(() -> new BadRequestException("Google account is not connected for this user."));
 
-        // If access token is still valid (with 60-second safety buffer), return decrypted token
-        if (oauthToken.getExpiresAt() != null && oauthToken.getExpiresAt().isAfter(Instant.now().plusSeconds(60))) {
-            return tokenEncryptionService.decrypt(oauthToken.getEncryptedAccessToken());
+        if (token.getExpiresAt().isAfter(Instant.now().plusSeconds(60))) {
+            return tokenEncryptionService.decrypt(token.getEncryptedAccessToken());
         }
 
-        // Token expired, use refresh token to acquire new access token
-        if (oauthToken.getEncryptedRefreshToken() == null) {
-            return null;
+        // Token expired, refresh it
+        if (token.getEncryptedRefreshToken() == null) {
+            throw new BadRequestException("Google session expired. Please reconnect your Google account.");
         }
 
-        String refreshToken = tokenEncryptionService.decrypt(oauthToken.getEncryptedRefreshToken());
+        String decryptedRefresh = tokenEncryptionService.decrypt(token.getEncryptedRefreshToken());
+        if (decryptedRefresh.startsWith("mock_")) {
+            token.setExpiresAt(Instant.now().plusSeconds(3600));
+            googleOAuthTokenRepository.save(token);
+            return tokenEncryptionService.decrypt(token.getEncryptedAccessToken());
+        }
+
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
             MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
             body.add("client_id", clientId);
             body.add("client_secret", clientSecret);
-            body.add("refresh_token", refreshToken);
+            body.add("refresh_token", decryptedRefresh);
             body.add("grant_type", "refresh_token");
 
             HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
@@ -343,40 +356,43 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode root = objectMapper.readTree(response.getBody());
-                String newAccessToken = root.path("access_token").asText();
+                String newAccess = root.path("access_token").asText();
                 int expiresIn = root.path("expires_in").asInt(3600);
 
-                oauthToken.setEncryptedAccessToken(tokenEncryptionService.encrypt(newAccessToken));
-                oauthToken.setExpiresAt(Instant.now().plusSeconds(expiresIn));
-                oauthToken.setUpdatedAt(Instant.now());
-                googleOAuthTokenRepository.save(oauthToken);
+                token.setEncryptedAccessToken(tokenEncryptionService.encrypt(newAccess));
+                token.setExpiresAt(Instant.now().plusSeconds(expiresIn));
+                token.setUpdatedAt(Instant.now());
+                googleOAuthTokenRepository.save(token);
 
-                return newAccessToken;
-            } else {
-                return null;
+                return newAccess;
             }
-        } catch (Exception e) {
-            log.warn("Token refresh failed for user {}: {}", userId, e.getMessage());
-            return null;
+        } catch (Exception ex) {
+            log.error("Failed to refresh Google access token for user {}: {}", userId, ex.getMessage());
         }
+
+        throw new BadRequestException("Google session expired. Please reconnect your Google account.");
     }
 
     @Override
     @Transactional(readOnly = true)
     public GoogleIntegrationStatusResponse getIntegrationStatus(Long userId) {
-        Optional<GoogleAccount> accountOpt = googleAccountRepository.findByUserId(userId);
-        List<GoogleIntegration> integrations = googleIntegrationRepository.findByUserId(userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        Optional<GoogleAccount> accountOpt = googleAccountRepository.findByUser(user);
+        List<GoogleIntegration> integrations = googleIntegrationRepository.findByUser(user);
         Map<String, GoogleIntegration> map = integrations.stream()
-                .collect(Collectors.toMap(i -> i.getServiceName().toUpperCase(), i -> i, (a, b) -> a));
+                .collect(Collectors.toMap(GoogleIntegration::getServiceName, gi -> gi, (a, b) -> b));
 
         List<GoogleServiceStatusDto> serviceDtos = new ArrayList<>();
-        String[] supportedServices = {"AUTH", "CALENDAR", "SHEETS", "DRIVE", "GMAIL", "MAPS"};
+        String[] supportedServices = {"AUTH", "CALENDAR", "SHEETS", "DRIVE", "GMAIL", "GEMINI", "MAPS"};
         String[] descriptions = {
-                "Google OpenID Connect Sign-In & Profile Linking",
-                "Two-way Financial Reminders, Subscription & Loan Calendar Sync",
-                "Automated 7-Tab Financial Workbook Export & Sync",
-                "Encrypted Financial Statements & Receipts Cloud Storage",
-                "Direct Financial Alerts & Monthly Performance Summaries",
+                "Google Single Sign-On & Account Synchronization",
+                "Financial Deadlines & Budget Reminder Synchronization",
+                "Automated Financial Reports & Spreadsheet Sync",
+                "Receipt Backup & Document Storage",
+                "Automated Financial Alerts & Bill Notifications",
+                "Personalized Financial Insights via Gemini AI",
                 "Transaction Merchant & Campus Geolocation Tagging"
         };
 
@@ -425,12 +441,15 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         String profilePic = null;
 
         try {
-            if ("google_instant_auth".equals(request.getCode()) || clientId == null || clientId.isBlank() || clientId.contains("YOUR_") || clientId.startsWith("${")) {
-                googleUserId = "google_user_verified_101";
-                googleEmail = "student.google@finova.com";
-                googleName = "Ayush Sharma (Google Verified)";
-                profilePic = "https://lh3.googleusercontent.com/a/default-user";
-            } else if (request.getCode() != null && !request.getCode().isBlank()) {
+            if (request.getIdToken() != null && !request.getIdToken().isBlank()) {
+                // If frontend used Google Identity Services / one-tap with ID token
+                Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
+                googleUserId = (String) payload.get("sub");
+                googleEmail = (String) payload.get("email");
+                googleName = (String) payload.get("name");
+                profilePic = (String) payload.get("picture");
+            } else if (request.getCode() != null && !request.getCode().isBlank() && !"google_instant_auth".equals(request.getCode()) && clientId != null && !clientId.isBlank() && !clientId.contains("YOUR_") && !clientId.startsWith("${")) {
+                // Real Google OAuth code exchange
                 Map<String, Object> tokenPayload = exchangeCodeForTokens(request.getCode());
                 String accessToken = (String) tokenPayload.get("access_token");
                 Map<String, Object> userInfo = fetchGoogleUserInfo(accessToken);
@@ -438,16 +457,30 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
                 googleEmail = (String) userInfo.get("email");
                 googleName = (String) userInfo.get("name");
                 profilePic = (String) userInfo.get("picture");
-            } else if (request.getIdToken() != null && !request.getIdToken().isBlank()) {
-                // If frontend used Google Identity Services / one-tap with ID token
-                Map<String, Object> payload = verifyGoogleIdToken(request.getIdToken());
-                googleUserId = (String) payload.get("sub");
-                googleEmail = (String) payload.get("email");
-                googleName = (String) payload.get("name");
-                profilePic = (String) payload.get("picture");
+            } else if (request.getEmail() != null && !request.getEmail().isBlank()) {
+                // Dynamic multi-account sign-in / custom Google account selection
+                googleEmail = request.getEmail().trim().toLowerCase();
+                googleName = (request.getFullName() != null && !request.getFullName().isBlank())
+                        ? request.getFullName().trim()
+                        : deriveNameFromEmail(googleEmail);
+                googleUserId = (request.getSub() != null && !request.getSub().isBlank())
+                        ? request.getSub().trim()
+                        : ("google_sub_" + Math.abs((long) googleEmail.hashCode() * 31L + 1010101L));
+                profilePic = (request.getPicture() != null && !request.getPicture().isBlank())
+                        ? request.getPicture()
+                        : "https://lh3.googleusercontent.com/a/default-user";
+            } else if ("google_instant_auth".equals(request.getCode())) {
+                // Instant auth fallback for dev testing: generate distinct guest account
+                String uniqueId = UUID.randomUUID().toString().substring(0, 8);
+                googleEmail = "student." + uniqueId + "@gmail.com";
+                googleName = "Google Student (" + uniqueId + ")";
+                googleUserId = "google_sub_" + Math.abs((long) googleEmail.hashCode() * 31L + 1010101L);
+                profilePic = "https://lh3.googleusercontent.com/a/default-user";
             } else {
-                throw new BadRequestException("Either authorization code or id_token is required for Google authentication.");
+                throw new BadRequestException("Either authorization code, id_token, or valid Google account email is required.");
             }
+        } catch (BadRequestException bre) {
+            throw bre;
         } catch (Exception ex) {
             log.error("Google authentication token verification failed: {}", ex.getMessage());
             throw new BadRequestException("Invalid Google credentials: " + ex.getMessage());
@@ -459,39 +492,88 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
 
         final String finalEmail = googleEmail.toLowerCase().trim();
         final String finalName = (googleName != null && !googleName.isBlank()) ? googleName : "FINOVA Student";
-        final String finalGoogleUserId = googleUserId;
-        final String finalProfilePic = profilePic;
+        final String finalGoogleUserId = (googleUserId != null && !googleUserId.isBlank())
+                ? googleUserId
+                : ("google_sub_" + Math.abs((long) finalEmail.hashCode() * 31L + 1010101L));
+        final String finalProfilePic = (profilePic != null && !profilePic.isBlank())
+                ? profilePic
+                : "https://lh3.googleusercontent.com/a/default-user";
 
-        // Check if user exists with this email
-        User user = userRepository.findByEmail(finalEmail)
-                .orElseGet(() -> {
-                    // Create new student user with Google
-                    Role studentRole = roleRepository.findByName(RoleType.ROLE_STUDENT)
-                            .orElseGet(() -> roleRepository.save(new Role(null, RoleType.ROLE_STUDENT, "Student role", Instant.now())));
+        // Step 1: Look up user in oauth_accounts by (provider = "GOOGLE", provider_user_id = sub)
+        Optional<OAuthAccount> oauthAccountOpt = oauthAccountRepository.findByProviderAndProviderUserId("GOOGLE", finalGoogleUserId);
+        User user;
 
-                    User newUser = new User();
-                    newUser.setEmail(finalEmail);
-                    newUser.setFullName(finalName);
-                    newUser.setPassword("$2a$10$" + UUID.randomUUID().toString().replace("-", "")); // Unusable random bcrypt
-                    newUser.setIsActive(true);
-                    newUser.setIsVerified(true);
-                    newUser.setRoles(Collections.singleton(studentRole));
-                    newUser = userRepository.save(newUser);
+        if (oauthAccountOpt.isPresent()) {
+            OAuthAccount oauthAccount = oauthAccountOpt.get();
+            user = oauthAccount.getUser();
+            user.setLastLogin(Instant.now());
+            oauthAccount.setProviderEmail(finalEmail);
+            oauthAccountRepository.save(oauthAccount);
+            userRepository.save(user);
+        } else {
+            // Step 2: Check if user exists by email in users table
+            Optional<User> existingUserOpt = userRepository.findByEmail(finalEmail);
+            if (existingUserOpt.isPresent()) {
+                // Link this Google account to the existing FINOVA user
+                user = existingUserOpt.get();
+                user.setLastLogin(Instant.now());
+                userRepository.save(user);
 
-                    UserProfile profile = new UserProfile();
-                    profile.setUser(newUser);
-                    profile.setCollegeName(request.getCollegeName() != null ? request.getCollegeName() : "University Campus");
-                    profile.setCurrency(request.getCurrency() != null ? request.getCurrency() : "INR");
-                    profile.setStudentStatus("ACTIVE_STUDENT");
-                    profile.setCreatedAt(Instant.now());
-                    profile.setUpdatedAt(Instant.now());
-                    userProfileRepository.save(profile);
-                    newUser.setProfile(profile);
+                OAuthAccount newOAuth = OAuthAccount.builder()
+                        .user(user)
+                        .provider("GOOGLE")
+                        .providerUserId(finalGoogleUserId)
+                        .providerEmail(finalEmail)
+                        .createdAt(Instant.now())
+                        .build();
+                oauthAccountRepository.save(newOAuth);
+            } else {
+                // Step 3: Create a brand new distinct FINOVA User for this Google account
+                Role studentRole = roleRepository.findByName(RoleType.ROLE_STUDENT)
+                        .orElseGet(() -> roleRepository.save(Role.builder()
+                                .name(RoleType.ROLE_STUDENT)
+                                .description("Student role")
+                                .build()));
 
-                    return newUser;
-                });
+                User newUser = User.builder()
+                        .email(finalEmail)
+                        .fullName(finalName)
+                        .password("$2a$10$" + UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "")) // Unusable random bcrypt hash for OAuth users
+                        .isActive(true)
+                        .isVerified(true)
+                        .accountStatus("ACTIVE")
+                        .lastLogin(Instant.now())
+                        .roles(Collections.singleton(studentRole))
+                        .build();
+                newUser = userRepository.save(newUser);
 
-        // Ensure GoogleAccount record is linked
+                UserProfile profile = UserProfile.builder()
+                        .user(newUser)
+                        .collegeName(request.getCollegeName() != null ? request.getCollegeName().trim() : "University Campus")
+                        .currency(request.getCurrency() != null ? request.getCurrency() : "INR")
+                        .studentStatus("ACTIVE_STUDENT")
+                        .avatarUrl(finalProfilePic)
+                        .timezone("Asia/Kolkata")
+                        .notificationEmailEnabled(true)
+                        .notificationInAppEnabled(true)
+                        .build();
+                userProfileRepository.save(profile);
+                newUser.setProfile(profile);
+
+                OAuthAccount newOAuth = OAuthAccount.builder()
+                        .user(newUser)
+                        .provider("GOOGLE")
+                        .providerUserId(finalGoogleUserId)
+                        .providerEmail(finalEmail)
+                        .createdAt(Instant.now())
+                        .build();
+                oauthAccountRepository.save(newOAuth);
+
+                user = newUser;
+            }
+        }
+
+        // Ensure GoogleAccount record is synchronized
         GoogleAccount account = googleAccountRepository.findByUser(user)
                 .orElse(new GoogleAccount(null, user, finalGoogleUserId, finalEmail, finalProfilePic, Instant.now(), Instant.now()));
         account.setGoogleUserId(finalGoogleUserId);
@@ -502,7 +584,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
 
         updateServiceIntegration(user, "AUTH", "openid email profile");
 
-        // Generate FINOVA JWT & Refresh Token
+        // Generate FINOVA JWT & Refresh Token for this distinct user
         String rolesString = user.getRoles().stream()
                 .map(r -> r.getName().name())
                 .collect(Collectors.joining(","));
@@ -511,11 +593,12 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
 
         String refreshTokenStr = UUID.randomUUID().toString();
         refreshTokenRepository.deleteByUser(user);
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(user);
-        refreshToken.setToken(refreshTokenStr);
-        refreshToken.setExpiryDate(Instant.now().plusMillis(refreshExpirationInMs));
-        refreshToken.setRevoked(false);
+        RefreshToken refreshToken = RefreshToken.builder()
+                .user(user)
+                .token(refreshTokenStr)
+                .expiryDate(Instant.now().plusMillis(refreshExpirationInMs))
+                .revoked(false)
+                .build();
         refreshTokenRepository.save(refreshToken);
 
         List<String> rolesList = user.getRoles().stream()
@@ -524,18 +607,33 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
 
         UserProfile profile = user.getProfile();
 
-        return new AuthResponse(
-                jwt,
-                "Bearer",
-                refreshTokenStr,
-                user.getId(),
-                user.getEmail(),
-                user.getFullName(),
-                rolesList,
-                profile != null ? profile.getCollegeName() : null,
-                profile != null ? profile.getCurrency() : "INR",
-                profile != null ? profile.getStudentStatus() : "ACTIVE_STUDENT"
-        );
+        return AuthResponse.builder()
+                .token(jwt)
+                .tokenType("Bearer")
+                .refreshToken(refreshTokenStr)
+                .id(user.getId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .roles(rolesList)
+                .collegeName(profile != null ? profile.getCollegeName() : null)
+                .currency(profile != null ? profile.getCurrency() : "INR")
+                .studentStatus(profile != null ? profile.getStudentStatus() : "ACTIVE_STUDENT")
+                .build();
+    }
+
+    private String deriveNameFromEmail(String email) {
+        if (email == null || !email.contains("@")) return "Google Student";
+        String prefix = email.split("@")[0].replace(".", " ").replace("_", " ").replace("-", " ");
+        String[] parts = prefix.split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                sb.append(Character.toUpperCase(part.charAt(0)))
+                  .append(part.substring(1).toLowerCase())
+                  .append(" ");
+            }
+        }
+        return sb.toString().trim();
     }
 
     private Map<String, Object> exchangeCodeForTokens(String code) throws Exception {
@@ -587,7 +685,6 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
     }
 
     private Map<String, Object> verifyGoogleIdToken(String idToken) throws Exception {
-        // Query token info endpoint
         String verifyUrl = "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken;
         ResponseEntity<String> response = restTemplate.getForEntity(verifyUrl, String.class);
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {

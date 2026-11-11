@@ -429,8 +429,16 @@ export const googleApi = {
   getSyncHistory: () => api.get<GoogleSyncLog[]>('/integrations/google/sync-history'),
 
   // Public Google Auth
-  googleAuth: (data: { idToken?: string; code?: string; collegeName?: string; currency?: string }) =>
-    api.post<AuthResponse>('/auth/google', data),
+  googleAuth: (data: {
+    idToken?: string;
+    code?: string;
+    collegeName?: string;
+    currency?: string;
+    email?: string;
+    fullName?: string;
+    sub?: string;
+    picture?: string;
+  }) => api.post<AuthResponse>('/auth/google', data),
 };
 
 export default api;

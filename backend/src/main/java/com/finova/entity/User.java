@@ -9,8 +9,6 @@ import java.util.Set;
 @Table(name = "users")
 public class User {
 
-
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -18,7 +16,7 @@ public class User {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash", nullable = true)
     private String password;
 
     @Column(name = "full_name", nullable = false, length = 100)
@@ -29,6 +27,12 @@ public class User {
 
     @Column(name = "is_verified")
     private Boolean isVerified = false;
+
+    @Column(name = "account_status", length = 30)
+    private String accountStatus = "ACTIVE";
+
+    @Column(name = "last_login")
+    private Instant lastLogin;
 
     @Column(name = "verification_token")
     private String verificationToken;
@@ -56,23 +60,24 @@ public class User {
     @Column(name = "updated_at")
     private Instant updatedAt = Instant.now();
 
-
     public User() {}
 
-    public User(Long id, String email, String password, String fullName, Boolean isActive, Boolean isVerified, String verificationToken, String resetPasswordToken, Instant resetPasswordExpiry, Set<Role> roles, UserProfile profile, Instant createdAt, Instant updatedAt) {
+    public User(Long id, String email, String password, String fullName, Boolean isActive, Boolean isVerified, String accountStatus, Instant lastLogin, String verificationToken, String resetPasswordToken, Instant resetPasswordExpiry, Set<Role> roles, UserProfile profile, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.email = email;
         this.password = password;
         this.fullName = fullName;
-        this.isActive = isActive;
-        this.isVerified = isVerified;
+        this.isActive = isActive != null ? isActive : true;
+        this.isVerified = isVerified != null ? isVerified : false;
+        this.accountStatus = accountStatus != null ? accountStatus : "ACTIVE";
+        this.lastLogin = lastLogin;
         this.verificationToken = verificationToken;
         this.resetPasswordToken = resetPasswordToken;
         this.resetPasswordExpiry = resetPasswordExpiry;
-        this.roles = roles;
+        this.roles = roles != null ? roles : new HashSet<>();
         this.profile = profile;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
+        this.createdAt = createdAt != null ? createdAt : Instant.now();
+        this.updatedAt = updatedAt != null ? updatedAt : Instant.now();
     }
 
     public Long getId() {
@@ -129,6 +134,30 @@ public class User {
 
     public void setIsVerified(Boolean isVerified) {
         this.isVerified = isVerified;
+    }
+
+    public Boolean getEmailVerified() {
+        return this.isVerified;
+    }
+
+    public void setEmailVerified(Boolean emailVerified) {
+        this.isVerified = emailVerified;
+    }
+
+    public String getAccountStatus() {
+        return this.accountStatus;
+    }
+
+    public void setAccountStatus(String accountStatus) {
+        this.accountStatus = accountStatus;
+    }
+
+    public Instant getLastLogin() {
+        return this.lastLogin;
+    }
+
+    public void setLastLogin(Instant lastLogin) {
+        this.lastLogin = lastLogin;
     }
 
     public String getVerificationToken() {
@@ -196,12 +225,14 @@ public class User {
         private String email;
         private String password;
         private String fullName;
-        private Boolean isActive;
-        private Boolean isVerified;
+        private Boolean isActive = true;
+        private Boolean isVerified = false;
+        private String accountStatus = "ACTIVE";
+        private Instant lastLogin;
         private String verificationToken;
         private String resetPasswordToken;
         private Instant resetPasswordExpiry;
-        private Set<Role> roles;
+        private Set<Role> roles = new HashSet<>();
         private UserProfile profile;
         private Instant createdAt;
         private Instant updatedAt;
@@ -235,6 +266,16 @@ public class User {
 
         public UserBuilder isVerified(Boolean isVerified) {
             this.isVerified = isVerified;
+            return this;
+        }
+
+        public UserBuilder accountStatus(String accountStatus) {
+            this.accountStatus = accountStatus;
+            return this;
+        }
+
+        public UserBuilder lastLogin(Instant lastLogin) {
+            this.lastLogin = lastLogin;
             return this;
         }
 
@@ -279,15 +320,17 @@ public class User {
             instance.setEmail(this.email);
             instance.setPassword(this.password);
             instance.setFullName(this.fullName);
-            instance.setIsActive(this.isActive);
-            instance.setIsVerified(this.isVerified);
+            instance.setIsActive(this.isActive != null ? this.isActive : true);
+            instance.setIsVerified(this.isVerified != null ? this.isVerified : false);
+            instance.setAccountStatus(this.accountStatus != null ? this.accountStatus : "ACTIVE");
+            instance.setLastLogin(this.lastLogin);
             instance.setVerificationToken(this.verificationToken);
             instance.setResetPasswordToken(this.resetPasswordToken);
             instance.setResetPasswordExpiry(this.resetPasswordExpiry);
             instance.setRoles(this.roles);
             instance.setProfile(this.profile);
-            instance.setCreatedAt(this.createdAt);
-            instance.setUpdatedAt(this.updatedAt);
+            instance.setCreatedAt(this.createdAt != null ? this.createdAt : Instant.now());
+            instance.setUpdatedAt(this.updatedAt != null ? this.updatedAt : Instant.now());
             return instance;
         }
     }

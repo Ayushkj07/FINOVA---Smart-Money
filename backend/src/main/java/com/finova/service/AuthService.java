@@ -12,4 +12,5 @@ public interface AuthService {
     void changePassword(Long userId, ChangePasswordRequest request);
     void forgotPassword(ForgotPasswordRequest request);
     void resetPassword(ResetPasswordRequest request);
+    void verifyEmail(String token);
 }

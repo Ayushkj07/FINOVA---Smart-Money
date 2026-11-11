@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "Authentication", description = "Student & Admin authentication, registration, password management")
@@ -19,6 +21,11 @@ public class AuthController {
 
     private final AuthService authService;
     private final GoogleOAuthService googleOAuthService;
+
+    public AuthController(AuthService authService, GoogleOAuthService googleOAuthService) {
+        this.authService = authService;
+        this.googleOAuthService = googleOAuthService;
+    }
 
     @PostMapping("/login")
     @Operation(summary = "Login with email and password")
@@ -36,6 +43,13 @@ public class AuthController {
     @Operation(summary = "Authenticate or register student using Google OAuth2")
     public ResponseEntity<AuthResponse> googleAuth(@RequestBody GoogleAuthRequest request) {
         return ResponseEntity.ok(googleOAuthService.authenticateWithGoogle(request));
+    }
+
+    @GetMapping("/verify-email")
+    @Operation(summary = "Verify student email address using token")
+    public ResponseEntity<Map<String, String>> verifyEmail(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now access your FINOVA account."));
     }
 
     @PostMapping("/refresh")
@@ -89,10 +103,4 @@ public class AuthController {
         authService.resetPassword(request);
         return ResponseEntity.ok().build();
     }
-
-    public AuthController(AuthService authService, GoogleOAuthService googleOAuthService) {
-        this.authService = authService;
-        this.googleOAuthService = googleOAuthService;
-    }
-
 }
