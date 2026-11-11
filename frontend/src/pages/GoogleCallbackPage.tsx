@@ -41,25 +41,43 @@ export const GoogleCallbackPage: React.FC = () => {
 
       try {
         if (isGuest || service === 'AUTH') {
-          // Authentication / Registration flow
-          const res = await authApi.googleLogin({ code });
-          localStorage.setItem('finova_token', res.data.token);
-          if (res.data.refreshToken) {
-            localStorage.setItem('finova_refresh_token', res.data.refreshToken);
-          }
-          const userObj = {
-            id: res.data.id,
-            email: res.data.email,
-            fullName: res.data.fullName,
-            roles: res.data.roles,
-            currency: res.data.currency,
-            collegeName: res.data.collegeName,
-          };
-          localStorage.setItem('finova_user', JSON.stringify(userObj));
+          // Official Google OpenID Connect flow - yields OTP challenge
+          const res = await googleApi.googleAuth({ code });
           setStatus('success');
-          setTimeout(() => {
-            window.location.href = '/dashboard';
-          }, 1500);
+          
+          if (res.data?.challengeRequired && res.data?.challengeId) {
+            setTimeout(() => {
+              navigate(
+                `/verify-otp?challengeId=${encodeURIComponent(res.data.challengeId)}&maskedEmail=${encodeURIComponent(
+                  res.data.maskedEmail || ''
+                )}`,
+                { replace: true }
+              );
+            }, 800);
+            return;
+          }
+
+          // Fallback if token was returned directly
+          if ((res.data as any)?.token) {
+            const authData: any = res.data;
+            localStorage.setItem('finova_token', authData.token);
+            if (authData.refreshToken) {
+              localStorage.setItem('finova_refresh_token', authData.refreshToken);
+            }
+            const userObj = {
+              id: authData.id,
+              email: authData.email,
+              fullName: authData.fullName,
+              roles: authData.roles,
+              currency: authData.currency,
+              collegeName: authData.collegeName,
+            };
+            localStorage.setItem('finova_user', JSON.stringify(userObj));
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 800);
+            return;
+          }
         } else {
           // Connecting an incremental Google Service (Calendar, Sheets, Drive, Gmail)
           await googleApi.callback({
@@ -104,9 +122,9 @@ export const GoogleCallbackPage: React.FC = () => {
             <div className="w-14 h-14 rounded-2xl bg-sage-100 text-sage-700 mx-auto flex items-center justify-center">
               <CheckCircle2 className="w-8 h-8 text-finova-success" />
             </div>
-            <h2 className="text-base font-bold text-finova-text">Google Connected Successfully!</h2>
+            <h2 className="text-base font-bold text-finova-text">Google Authenticated Successfully!</h2>
             <p className="text-xs text-finova-muted">
-              Redirecting you to Connected Apps settings...
+              Redirecting to your next step...
             </p>
           </div>
         )}
@@ -116,14 +134,14 @@ export const GoogleCallbackPage: React.FC = () => {
             <div className="w-14 h-14 rounded-2xl bg-red-100 text-finova-danger mx-auto flex items-center justify-center">
               <AlertCircle className="w-8 h-8" />
             </div>
-            <h2 className="text-base font-bold text-finova-text">Integration Error</h2>
+            <h2 className="text-base font-bold text-finova-text">Authentication Error</h2>
             <p className="text-xs text-finova-danger">{errorMessage}</p>
-            <div className="pt-2">
+            <div className="pt-2 flex justify-center gap-3">
               <button
-                onClick={() => navigate('/settings/connected-apps')}
-                className="px-5 py-2.5 rounded-2xl bg-primary hover:bg-primary-dark text-white text-xs font-semibold"
+                onClick={() => navigate('/login')}
+                className="px-5 py-2.5 rounded-2xl bg-primary hover:bg-primary-dark text-white text-xs font-semibold shadow-sm"
               >
-                Return to Connected Apps
+                Return to Login
               </button>
             </div>
           </div>

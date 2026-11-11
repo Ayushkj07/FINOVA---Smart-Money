@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { googleApi } from '../services/api';
-import { Lock, Mail, ArrowRight, AlertCircle, Sparkles, UserCheck, Check } from 'lucide-react';
-import { GoogleAccountModal, GoogleProfile } from '../components/common/GoogleAccountModal';
+import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -11,55 +10,25 @@ export const LoginPage: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const { login, googleLogin } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleClick = async () => {
     setError(null);
     try {
       setLoading(true);
-      // Check if real Google Cloud OAuth is configured
       const res = await googleApi.getConnectUrl('AUTH');
       const url = res.data?.authUrl;
-      if (
-        url &&
-        url.startsWith('https://accounts.google.com') &&
-        !url.includes('client_id=&') &&
-        !url.includes('client_id=YOUR_') &&
-        !url.includes('client_id=%24%7B')
-      ) {
+      if (url && url.startsWith('http')) {
         window.location.href = url;
         return;
       }
-    } catch {
-      // Fallback to Google Account Switcher Modal
-    } finally {
-      setLoading(false);
-    }
-
-    // Open multi-account Google selection modal
-    setShowGoogleModal(true);
-  };
-
-  const handleSelectGoogleAccount = async (account: GoogleProfile) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const auth = await googleLogin({
-        email: account.email,
-        fullName: account.fullName,
-        sub: account.sub,
-        picture: account.picture,
-      });
-
-      if (auth.roles && auth.roles.includes('ROLE_ADMIN')) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+      setError('Google OAuth configuration is incomplete. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend configuration.');
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Google Sign-In failed. Please try again.');
+      setError(
+        err.response?.data?.message ||
+          'Google Sign-In is unavailable. Please verify Google Cloud OAuth credentials (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) in the server environment.'
+      );
     } finally {
       setLoading(false);
     }
@@ -85,25 +54,6 @@ export const LoginPage: React.FC = () => {
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid email or password. Please verify your credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    try {
-      setLoading(true);
-      setError(null);
-      const auth = await login({ email: demoEmail, password: demoPass });
-      if (auth.roles && auth.roles.includes('ROLE_ADMIN')) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Unable to sign in with demo credentials.');
     } finally {
       setLoading(false);
     }
@@ -231,31 +181,6 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Quick Demo Autofill Pills */}
-          <div className="mt-6 pt-6 border-t border-finova-border">
-            <span className="block text-[11px] font-bold text-finova-muted uppercase tracking-wider text-center mb-3">
-              One-Click Quick Demo Sign In
-            </span>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleDemoLogin('student@finova.com', 'Student@1234')}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-lavender-50 border border-lavender-200 text-primary-dark text-xs font-bold hover:bg-lavender-100 transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-primary" />
-                <span>Demo Student</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin('admin@finova.com', 'Admin@1234')}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-sage-50 border border-sage-200 text-sage-800 text-xs font-bold hover:bg-sage-100 transition-colors"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-sage-700" />
-                <span>Demo Admin</span>
-              </button>
-            </div>
-          </div>
-
           <p className="mt-6 text-center text-xs text-finova-muted">
             Don't have an account?{' '}
             <Link to="/register" className="font-bold text-primary hover:text-primary-dark">
@@ -264,14 +189,6 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
-
-      {/* Google Account Chooser Modal */}
-      <GoogleAccountModal
-        isOpen={showGoogleModal}
-        onClose={() => setShowGoogleModal(false)}
-        onSelectAccount={handleSelectGoogleAccount}
-        title="Sign in with Google"
-      />
     </div>
   );
 };

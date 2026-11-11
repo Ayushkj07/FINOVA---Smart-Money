@@ -19,6 +19,22 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  mail:
+    host: ${SPRING_MAIL_HOST:}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: false
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 # Profile: MySQL (Production / Standard)
 ---
 spring:
@@ -88,6 +104,13 @@ app:
     client-secret: ${GOOGLE_CLIENT_SECRET:}
     redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:5173/settings/connected-apps/callback}
     encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:c2VjdXJlX2dvb2dsZV90b2tlbl9lbmNyeXB0aW9uX2tleV8yMDI2X2Zpbm92YQ==}
+  otp:
+    expiration-minutes: 5
+    max-attempts: 5
+    resend-cooldown-seconds: 60
+  mail:
+    from: ${SPRING_MAIL_FROM:noreply@finova.com}
+    from-name: "FINOVA Security"
 
 springdoc:
   api-docs:

@@ -26,7 +26,8 @@ import {
   GoogleSheetsExportResponse,
   GoogleDriveFile,
   GoogleDriveUploadResponse,
-  GoogleSyncLog
+  GoogleSyncLog,
+  GoogleAuthChallengeResponse
 } from '../types';
 import {
   mockUserStudent,
@@ -91,67 +92,19 @@ api.interceptors.response.use(
       }
     }
 
-    // Vercel Preview / Offline Fallback Handler
+    // Vercel Preview / Offline Fallback Handler for UI preview
     const isFallbackNeeded = !error.response || error.response.status === 404 || error.response.status >= 500;
     if (isFallbackNeeded && originalRequest?.url) {
       const url = originalRequest.url;
       const method = (originalRequest.method || 'get').toLowerCase();
 
+      // Never mock authentication endpoints - real credentials and real OTP challenges are required
+      if (url.includes('/auth/')) {
+        return Promise.reject(error);
+      }
+
       let fallbackData: any = null;
-      if (url.includes('/auth/login')) {
-        let reqData: any = {};
-        try {
-          reqData = originalRequest.data ? (typeof originalRequest.data === 'string' ? JSON.parse(originalRequest.data) : originalRequest.data) : {};
-        } catch (e) {
-          reqData = {};
-        }
-        const isAdmin = reqData.email?.includes('admin');
-        fallbackData = {
-          token: 'finova_demo_jwt_' + Date.now(),
-          tokenType: 'Bearer',
-          refreshToken: 'finova_demo_refresh_' + Date.now(),
-          id: isAdmin ? 1 : 2,
-          email: reqData.email || (isAdmin ? 'admin@finova.com' : 'student@finova.com'),
-          fullName: isAdmin ? 'System Administrator' : 'Ayush Sharma',
-          roles: [isAdmin ? 'ROLE_ADMIN' : 'ROLE_STUDENT'],
-          collegeName: isAdmin ? 'FINOVA Headquarters' : 'Apex Institute of Technology',
-          currency: 'INR',
-          studentStatus: 'ACTIVE_STUDENT'
-        };
-      } else if (url.includes('/auth/google')) {
-        fallbackData = {
-          token: 'finova_google_jwt_' + Date.now(),
-          tokenType: 'Bearer',
-          refreshToken: 'finova_google_refresh_' + Date.now(),
-          id: 777,
-          email: 'student.google@finova.com',
-          fullName: 'Ayush Sharma (Google Verified)',
-          roles: ['ROLE_STUDENT'],
-          collegeName: 'Google Developer Student Campus',
-          currency: 'INR',
-          studentStatus: 'ACTIVE_STUDENT'
-        };
-      } else if (url.includes('/auth/register')) {
-        fallbackData = {
-          token: 'finova_jwt_' + Date.now(),
-          tokenType: 'Bearer',
-          refreshToken: 'finova_refresh_' + Date.now(),
-          id: 105,
-          email: 'student@finova.com',
-          fullName: 'Ayush Sharma',
-          roles: ['ROLE_STUDENT'],
-          collegeName: 'Apex Institute of Technology',
-          currency: 'INR',
-          studentStatus: 'ACTIVE_STUDENT'
-        };
-      } else if (url.includes('/auth/me')) {
-        let savedUser: any = null;
-        try {
-          const raw = localStorage.getItem('finova_user');
-          if (raw && raw !== 'undefined') savedUser = JSON.parse(raw);
-        } catch (e) {}
-        fallbackData = savedUser || mockUserStudent;
-      } else if (url.includes('/dashboard/summary')) {
+      if (url.includes('/dashboard/summary')) {
         fallbackData = mockDashboardSummary;
       } else if (url.includes('/dashboard/analytics')) {
         fallbackData = mockDashboardAnalytics;
@@ -428,17 +381,13 @@ export const googleApi = {
   // Sync History
   getSyncHistory: () => api.get<GoogleSyncLog[]>('/integrations/google/sync-history'),
 
-  // Public Google Auth
-  googleAuth: (data: {
-    idToken?: string;
-    code?: string;
-    collegeName?: string;
-    currency?: string;
-    email?: string;
-    fullName?: string;
-    sub?: string;
-    picture?: string;
-  }) => api.post<AuthResponse>('/auth/google', data),
+  // Public Google Auth & Two-Factor Email OTP
+  googleAuth: (data: { idToken?: string; code?: string; collegeName?: string; currency?: string }) =>
+    api.post<GoogleAuthChallengeResponse>('/auth/google', data),
+  verifyOtp: (data: { challengeId: string; otp: string }) =>
+    api.post<AuthResponse>('/auth/otp/verify', data),
+  resendOtp: (data: { challengeId: string }) =>
+    api.post<GoogleAuthChallengeResponse>('/auth/otp/resend', data),
 };
 
 export default api;

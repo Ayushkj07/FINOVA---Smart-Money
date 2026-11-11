@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { googleApi } from '../services/api';
 import { User, Mail, Lock, GraduationCap, Coins, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
-import { GoogleAccountModal, GoogleProfile } from '../components/common/GoogleAccountModal';
 
 export const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -18,8 +17,7 @@ export const RegisterPage: React.FC = () => {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const { register, googleLogin } = useAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleClick = async () => {
@@ -28,45 +26,16 @@ export const RegisterPage: React.FC = () => {
       setLoading(true);
       const res = await googleApi.getConnectUrl('AUTH');
       const url = res.data?.authUrl;
-      if (
-        url &&
-        url.startsWith('https://accounts.google.com') &&
-        !url.includes('client_id=&') &&
-        !url.includes('client_id=YOUR_') &&
-        !url.includes('client_id=%24%7B')
-      ) {
+      if (url && url.startsWith('http')) {
         window.location.href = url;
         return;
       }
-    } catch {
-      // Fallback to Google Account Switcher Modal
-    } finally {
-      setLoading(false);
-    }
-
-    setShowGoogleModal(true);
-  };
-
-  const handleSelectGoogleAccount = async (account: GoogleProfile) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const auth = await googleLogin({
-        email: account.email,
-        fullName: account.fullName,
-        sub: account.sub,
-        picture: account.picture,
-        collegeName: formData.collegeName || 'Campus University',
-        currency: formData.currency || 'INR',
-      });
-
-      if (auth.roles && auth.roles.includes('ROLE_ADMIN')) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+      setError('Google OAuth configuration is incomplete. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend configuration.');
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Google Sign-Up failed. Please try again.');
+      setError(
+        err.response?.data?.message ||
+          'Google Sign-In is unavailable. Please verify Google Cloud OAuth credentials (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) in the server environment.'
+      );
     } finally {
       setLoading(false);
     }
@@ -173,7 +142,7 @@ export const RegisterPage: React.FC = () => {
                   required
                   value={formData.fullName}
                   onChange={handleChange}
-                  placeholder="Alex Morgan"
+                  placeholder="Your full name"
                   className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-finova-border focus:outline-none focus:border-primary text-finova-text bg-white"
                 />
               </div>
@@ -361,14 +330,6 @@ export const RegisterPage: React.FC = () => {
           </p>
         </div>
       </div>
-
-      {/* Google Account Chooser Modal */}
-      <GoogleAccountModal
-        isOpen={showGoogleModal}
-        onClose={() => setShowGoogleModal(false)}
-        onSelectAccount={handleSelectGoogleAccount}
-        title="Sign up with Google"
-      />
     </div>
   );
 };

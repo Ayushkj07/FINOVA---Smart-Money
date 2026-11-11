@@ -147,14 +147,14 @@ export const Navbar: React.FC<NavbarProps> = ({ title = 'Financial Dashboard' })
           >
             <div className="flex flex-col text-right">
               <span className="text-xs font-bold text-finova-text leading-tight">
-                {user?.fullName || 'Alex Morgan'}
+                {user?.fullName || 'Student User'}
               </span>
               <span className="text-[10px] text-finova-muted font-medium">
                 {isAdmin ? 'Administrator' : 'Student Account'}
               </span>
             </div>
             <div className="w-8 h-8 rounded-full bg-lavender-200 text-primary-dark font-bold flex items-center justify-center text-xs border border-lavender-300">
-              {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'A'}
+              {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
             </div>
           </button>
 

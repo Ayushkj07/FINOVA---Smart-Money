@@ -1,6 +1,6 @@
 package com.finova.integration.google.service;
 
-import com.finova.dto.auth.AuthResponse;
+import com.finova.dto.auth.GoogleAuthResponse;
 import com.finova.integration.google.dto.GoogleAuthRequest;
 import com.finova.integration.google.dto.GoogleConnectResponse;
 import com.finova.integration.google.dto.GoogleIntegrationStatusResponse;
@@ -12,5 +12,5 @@ public interface GoogleOAuthService {
     void revokeAllPermissions(Long userId);
     String getValidAccessToken(Long userId);
     GoogleIntegrationStatusResponse getIntegrationStatus(Long userId);
-    AuthResponse authenticateWithGoogle(GoogleAuthRequest request);
+    GoogleAuthResponse authenticateWithGoogle(GoogleAuthRequest request);
 }

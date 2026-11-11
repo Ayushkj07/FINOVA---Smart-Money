@@ -23,6 +23,7 @@ import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ConnectedAppsPage } from './pages/ConnectedAppsPage';
 import { GoogleCallbackPage } from './pages/GoogleCallbackPage';
+import { OtpVerificationPage } from './pages/OtpVerificationPage';
 
 // Route Guards
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -76,6 +77,7 @@ export const App: React.FC = () => {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/verify-otp" element={<OtpVerificationPage />} />
             <Route path="/settings/connected-apps/callback" element={<GoogleCallbackPage />} />
             <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
             <Route path="/google-callback" element={<GoogleCallbackPage />} />

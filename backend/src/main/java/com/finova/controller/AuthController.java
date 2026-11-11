@@ -5,6 +5,7 @@ import com.finova.integration.google.dto.GoogleAuthRequest;
 import com.finova.integration.google.service.GoogleOAuthService;
 import com.finova.security.UserPrincipal;
 import com.finova.service.AuthService;
+import com.finova.service.OtpChallengeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -16,15 +17,19 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "Authentication", description = "Student & Admin authentication, registration, password management")
+@Tag(name = "Authentication", description = "Student & Admin authentication, registration, Google OAuth with Email OTP verification")
 public class AuthController {
 
     private final AuthService authService;
     private final GoogleOAuthService googleOAuthService;
+    private final OtpChallengeService otpChallengeService;
 
-    public AuthController(AuthService authService, GoogleOAuthService googleOAuthService) {
+    public AuthController(AuthService authService,
+                          GoogleOAuthService googleOAuthService,
+                          OtpChallengeService otpChallengeService) {
         this.authService = authService;
         this.googleOAuthService = googleOAuthService;
+        this.otpChallengeService = otpChallengeService;
     }
 
     @PostMapping("/login")
@@ -40,9 +45,21 @@ public class AuthController {
     }
 
     @PostMapping("/google")
-    @Operation(summary = "Authenticate or register student using Google OAuth2")
-    public ResponseEntity<AuthResponse> googleAuth(@RequestBody GoogleAuthRequest request) {
+    @Operation(summary = "Authenticate with Google and generate 6-digit Email OTP challenge")
+    public ResponseEntity<GoogleAuthResponse> googleAuth(@RequestBody GoogleAuthRequest request) {
         return ResponseEntity.ok(googleOAuthService.authenticateWithGoogle(request));
+    }
+
+    @PostMapping("/otp/verify")
+    @Operation(summary = "Verify 6-digit email OTP and issue authenticated FINOVA session")
+    public ResponseEntity<AuthResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        return ResponseEntity.ok(otpChallengeService.verifyOtp(request));
+    }
+
+    @PostMapping("/otp/resend")
+    @Operation(summary = "Resend 6-digit email OTP verification code with 60s cooldown")
+    public ResponseEntity<GoogleAuthResponse> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
+        return ResponseEntity.ok(otpChallengeService.resendOtp(request));
     }
 
     @GetMapping("/verify-email")

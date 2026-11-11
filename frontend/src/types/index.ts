@@ -44,6 +44,16 @@ export interface AuthResponse {
   studentStatus?: string;
 }
 
+export interface GoogleAuthChallengeResponse {
+  challengeRequired: boolean;
+  challengeId: string;
+  email: string;
+  maskedEmail: string;
+  expiresInSeconds: number;
+  resendCooldownSeconds: number;
+  message: string;
+}
+
 export interface DashboardSummary {
   totalBalance: number;
   monthlyIncome: number;
