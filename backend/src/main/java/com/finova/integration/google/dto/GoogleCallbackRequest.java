@@ -5,14 +5,16 @@ public class GoogleCallbackRequest {
     private String state;
     private String service;
     private String error;
+    private String redirectUri;
 
     public GoogleCallbackRequest() {}
 
-    public GoogleCallbackRequest(String code, String state, String service, String error) {
+    public GoogleCallbackRequest(String code, String state, String service, String error, String redirectUri) {
         this.code = code;
         this.state = state;
         this.service = service;
         this.error = error;
+        this.redirectUri = redirectUri;
     }
 
     public String getCode() { return code; }
@@ -29,4 +31,7 @@ public class GoogleCallbackRequest {
 
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
+
+    public String getRedirectUri() { return redirectUri; }
+    public void setRedirectUri(String redirectUri) { this.redirectUri = redirectUri; }
 }

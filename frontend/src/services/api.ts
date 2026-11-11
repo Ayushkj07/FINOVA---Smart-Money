@@ -346,10 +346,27 @@ export const adminApi = {
 // --- GOOGLE INTEGRATION SUITE API ---
 export const googleApi = {
   getStatus: () => api.get<GoogleIntegrationStatus>('/integrations/google/status'),
-  getConnectUrl: (service = 'ALL') =>
-    api.get<GoogleConnectResponse>(`/integrations/google/connect?service=${service}`),
-  callback: (data: { code: string; state?: string; service?: string }) =>
-    api.post<{ message: string }>('/integrations/google/callback', data),
+  getConnectUrl: (service = 'ALL', redirectUri?: string) => {
+    const effectiveRedirectUri =
+      redirectUri ||
+      (typeof window !== 'undefined'
+        ? `${window.location.origin}/settings/connected-apps/callback`
+        : undefined);
+    const query = new URLSearchParams({ service });
+    if (effectiveRedirectUri) query.append('redirectUri', effectiveRedirectUri);
+    return api.get<GoogleConnectResponse>(`/integrations/google/connect?${query.toString()}`);
+  },
+  callback: (data: { code: string; state?: string; service?: string; redirectUri?: string }) => {
+    const payload = {
+      ...data,
+      redirectUri:
+        data.redirectUri ||
+        (typeof window !== 'undefined'
+          ? `${window.location.origin}/settings/connected-apps/callback`
+          : undefined),
+    };
+    return api.post<{ message: string }>('/integrations/google/callback', payload);
+  },
   disconnect: (service: string) =>
     api.post<{ message: string }>(`/integrations/google/disconnect?service=${service}`),
   revokeAll: () =>
@@ -382,8 +399,24 @@ export const googleApi = {
   getSyncHistory: () => api.get<GoogleSyncLog[]>('/integrations/google/sync-history'),
 
   // Public Google Auth & Two-Factor Email OTP
-  googleAuth: (data: { idToken?: string; code?: string; collegeName?: string; currency?: string }) =>
-    api.post<GoogleAuthChallengeResponse>('/auth/google', data),
+  googleAuth: (data: {
+    idToken?: string;
+    code?: string;
+    collegeName?: string;
+    currency?: string;
+    redirectUri?: string;
+    state?: string;
+  }) => {
+    const payload = {
+      ...data,
+      redirectUri:
+        data.redirectUri ||
+        (typeof window !== 'undefined'
+          ? `${window.location.origin}/settings/connected-apps/callback`
+          : undefined),
+    };
+    return api.post<GoogleAuthChallengeResponse>('/auth/google', payload);
+  },
   verifyOtp: (data: { challengeId: string; otp: string }) =>
     api.post<AuthResponse>('/auth/otp/verify', data),
   resendOtp: (data: { challengeId: string }) =>

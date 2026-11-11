@@ -42,7 +42,11 @@ export const GoogleCallbackPage: React.FC = () => {
       try {
         if (isGuest || service === 'AUTH') {
           // Official Google OpenID Connect flow - yields OTP challenge
-          const res = await googleApi.googleAuth({ code });
+          const res = await googleApi.googleAuth({
+            code,
+            state: state || undefined,
+            redirectUri: window.location.origin + window.location.pathname,
+          });
           setStatus('success');
           
           if (res.data?.challengeRequired && res.data?.challengeId) {
@@ -84,6 +88,7 @@ export const GoogleCallbackPage: React.FC = () => {
             code,
             state: state || undefined,
             service,
+            redirectUri: window.location.origin + window.location.pathname,
           });
 
           setStatus('success');

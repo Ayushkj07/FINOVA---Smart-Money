@@ -51,9 +51,10 @@ public class GoogleIntegrationController {
     @Operation(summary = "Generate Google OAuth authorization URL for incremental authorization")
     public ResponseEntity<GoogleConnectResponse> getConnectUrl(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
-            @RequestParam(defaultValue = "AUTH") String service) {
+            @RequestParam(defaultValue = "AUTH") String service,
+            @RequestParam(required = false) String redirectUri) {
         Long userId = userPrincipal != null ? userPrincipal.getId() : null;
-        return ResponseEntity.ok(googleOAuthService.getAuthorizationUrl(userId, service));
+        return ResponseEntity.ok(googleOAuthService.getAuthorizationUrl(userId, service, redirectUri));
     }
 
     @PostMapping("/callback")
@@ -61,7 +62,7 @@ public class GoogleIntegrationController {
     public ResponseEntity<Map<String, String>> handleCallback(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestBody GoogleCallbackRequest request) {
-        googleOAuthService.handleCallback(userPrincipal.getId(), request.getCode(), request.getState(), request.getServiceName());
+        googleOAuthService.handleCallback(userPrincipal.getId(), request.getCode(), request.getState(), request.getServiceName(), request.getRedirectUri());
         return ResponseEntity.ok(Map.of("message", "Google service connected successfully."));
     }
 

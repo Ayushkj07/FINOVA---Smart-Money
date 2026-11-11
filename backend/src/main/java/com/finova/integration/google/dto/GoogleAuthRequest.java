@@ -9,10 +9,12 @@ public class GoogleAuthRequest {
     private String picture;
     private String collegeName;
     private String currency;
+    private String redirectUri;
+    private String state;
 
     public GoogleAuthRequest() {}
 
-    public GoogleAuthRequest(String idToken, String code, String email, String fullName, String sub, String picture, String collegeName, String currency) {
+    public GoogleAuthRequest(String idToken, String code, String email, String fullName, String sub, String picture, String collegeName, String currency, String redirectUri, String state) {
         this.idToken = idToken;
         this.code = code;
         this.email = email;
@@ -21,6 +23,8 @@ public class GoogleAuthRequest {
         this.picture = picture;
         this.collegeName = collegeName;
         this.currency = currency;
+        this.redirectUri = redirectUri;
+        this.state = state;
     }
 
     public String getIdToken() { return idToken; }
@@ -46,4 +50,10 @@ public class GoogleAuthRequest {
 
     public String getCurrency() { return currency; }
     public void setCurrency(String currency) { this.currency = currency; }
+
+    public String getRedirectUri() { return redirectUri; }
+    public void setRedirectUri(String redirectUri) { this.redirectUri = redirectUri; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
 }

@@ -40,7 +40,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -65,6 +67,28 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
     private final OtpChallengeService otpChallengeService;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+
+    // Secure in-memory state tracking for CSRF mitigation & matching redirect URIs (TTL 15 mins)
+    private final Map<String, OAuthStateInfo> pendingStates = new ConcurrentHashMap<>();
+
+    private static class OAuthStateInfo {
+        private final Long userId;
+        private final String service;
+        private final String redirectUri;
+        private final Instant createdAt;
+
+        public OAuthStateInfo(Long userId, String service, String redirectUri, Instant createdAt) {
+            this.userId = userId;
+            this.service = service;
+            this.redirectUri = redirectUri;
+            this.createdAt = createdAt;
+        }
+
+        public Long getUserId() { return userId; }
+        public String getService() { return service; }
+        public String getRedirectUri() { return redirectUri; }
+        public Instant getCreatedAt() { return createdAt; }
+    }
 
     @Value("${app.google.client-id}")
     private String clientId;
@@ -111,22 +135,49 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         };
     }
 
+    private void cleanExpiredStates() {
+        Instant cutoff = Instant.now().minus(15, ChronoUnit.MINUTES);
+        pendingStates.entrySet().removeIf(entry -> entry.getValue().getCreatedAt().isBefore(cutoff));
+    }
+
+    private String resolveRedirectUri(String customRedirectUri) {
+        if (customRedirectUri != null && !customRedirectUri.isBlank()) {
+            return customRedirectUri.trim();
+        }
+        if (this.redirectUri != null && !this.redirectUri.isBlank() && !this.redirectUri.startsWith("${")) {
+            return this.redirectUri.trim();
+        }
+        return "http://localhost:8080/settings/connected-apps/callback";
+    }
+
     @Override
     public GoogleConnectResponse getAuthorizationUrl(Long userId, String serviceName) {
+        return getAuthorizationUrl(userId, serviceName, null);
+    }
+
+    @Override
+    public GoogleConnectResponse getAuthorizationUrl(Long userId, String serviceName, String customRedirectUri) {
         if (clientId == null || clientId.isBlank() || clientId.contains("YOUR_") || clientId.startsWith("${")) {
             throw new BadRequestException(
                 "Google Cloud OAuth 2.0 is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend environment variables to enable Google sign-in."
             );
         }
 
+        cleanExpiredStates();
+
         String service = serviceName != null ? serviceName.toUpperCase() : "AUTH";
         String scope = getScopeForService(service);
-        String state = UUID.randomUUID().toString() + "_" + (userId != null ? userId : "guest") + "_" + service;
+        String effectiveRedirectUri = resolveRedirectUri(customRedirectUri);
+
+        String stateToken = UUID.randomUUID().toString().replace("-", "");
+        String state = stateToken + "_" + (userId != null ? userId : "guest") + "_" + service;
+
+        pendingStates.put(stateToken, new OAuthStateInfo(userId, service, effectiveRedirectUri, Instant.now()));
 
         // Use prompt=select_account consent to enforce Google's official account picker
         String authUrl = UriComponentsBuilder.fromHttpUrl(GOOGLE_AUTH_URL)
                 .queryParam("client_id", clientId)
-                .queryParam("redirect_uri", redirectUri)
+                .queryParam("redirect_uri", effectiveRedirectUri)
                 .queryParam("response_type", "code")
                 .queryParam("scope", scope)
                 .queryParam("access_type", "offline")
@@ -141,6 +192,12 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
     @Override
     @Transactional
     public void handleCallback(Long userId, String code, String state, String serviceName) {
+        handleCallback(userId, code, state, serviceName, null);
+    }
+
+    @Override
+    @Transactional
+    public void handleCallback(Long userId, String code, String state, String serviceName, String customRedirectUri) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
@@ -152,10 +209,21 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
             throw new BadRequestException("Google Cloud OAuth 2.0 is not configured on the server.");
         }
 
+        // Validate state & retrieve recorded redirectUri
+        String effectiveRedirectUri = customRedirectUri;
+        if (state != null) {
+            String stateToken = state.contains("_") ? state.split("_")[0] : state;
+            OAuthStateInfo stateInfo = pendingStates.remove(stateToken);
+            if (stateInfo != null && (effectiveRedirectUri == null || effectiveRedirectUri.isBlank())) {
+                effectiveRedirectUri = stateInfo.getRedirectUri();
+            }
+        }
+        effectiveRedirectUri = resolveRedirectUri(effectiveRedirectUri);
+
         String service = serviceName != null ? serviceName.toUpperCase() : "AUTH";
         try {
             // Exchange authorization code for real Google tokens
-            Map<String, Object> tokenPayload = exchangeCodeForTokens(code);
+            Map<String, Object> tokenPayload = exchangeCodeForTokens(code, effectiveRedirectUri);
             String accessToken = (String) tokenPayload.get("access_token");
             String refreshToken = (String) tokenPayload.get("refresh_token");
             Integer expiresIn = (Integer) tokenPayload.get("expires_in");
@@ -429,8 +497,20 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
                 if (clientId == null || clientId.isBlank() || clientId.contains("YOUR_") || clientId.startsWith("${")) {
                     throw new BadRequestException("Google Cloud OAuth 2.0 is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend environment variables.");
                 }
-                // Exchange code for Google tokens
-                Map<String, Object> tokenPayload = exchangeCodeForTokens(request.getCode());
+
+                // Determine effective redirect URI from request or state
+                String effectiveRedirectUri = request.getRedirectUri();
+                if (request.getState() != null) {
+                    String stateToken = request.getState().contains("_") ? request.getState().split("_")[0] : request.getState();
+                    OAuthStateInfo stateInfo = pendingStates.remove(stateToken);
+                    if (stateInfo != null && (effectiveRedirectUri == null || effectiveRedirectUri.isBlank())) {
+                        effectiveRedirectUri = stateInfo.getRedirectUri();
+                    }
+                }
+                effectiveRedirectUri = resolveRedirectUri(effectiveRedirectUri);
+
+                // Exchange code for Google tokens using exact matching redirect URI
+                Map<String, Object> tokenPayload = exchangeCodeForTokens(request.getCode(), effectiveRedirectUri);
                 String accessToken = (String) tokenPayload.get("access_token");
                 Map<String, Object> userInfo = fetchGoogleUserInfo(accessToken);
                 googleUserId = (String) userInfo.get("sub");
@@ -550,7 +630,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         return otpChallengeService.createOtpChallenge(user, finalEmail, user.getFullName());
     }
 
-    private Map<String, Object> exchangeCodeForTokens(String code) throws Exception {
+    private Map<String, Object> exchangeCodeForTokens(String code, String effectiveRedirectUri) throws Exception {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
@@ -558,14 +638,14 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         body.add("code", code);
         body.add("client_id", clientId);
         body.add("client_secret", clientSecret);
-        body.add("redirect_uri", redirectUri);
+        body.add("redirect_uri", resolveRedirectUri(effectiveRedirectUri));
         body.add("grant_type", "authorization_code");
 
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(GOOGLE_TOKEN_URL, request, String.class);
 
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-            throw new BadRequestException("Failed to exchange Google authorization code.");
+            throw new BadRequestException("Failed to exchange Google authorization code. Please verify redirect_uri and client credentials in Google Cloud Console.");
         }
 
         JsonNode root = objectMapper.readTree(response.getBody());
@@ -607,6 +687,19 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
         }
 
         JsonNode root = objectMapper.readTree(response.getBody());
+
+        // Validate Audience matches our Client ID (when configured)
+        String aud = root.path("aud").asText();
+        if (clientId != null && !clientId.isBlank() && !clientId.contains("YOUR_") && !clientId.startsWith("${") && !clientId.equals(aud)) {
+            throw new BadRequestException("Google ID token was not issued for this application client ID.");
+        }
+
+        // Validate Issuer
+        String iss = root.path("iss").asText();
+        if (!"https://accounts.google.com".equals(iss) && !"accounts.google.com".equals(iss)) {
+            throw new BadRequestException("Google ID token issuer is invalid.");
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("sub", root.path("sub").asText());
         result.put("email", root.path("email").asText());
