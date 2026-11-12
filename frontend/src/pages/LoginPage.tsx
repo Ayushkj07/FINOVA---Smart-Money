@@ -33,7 +33,7 @@ export const LoginPage: React.FC = () => {
       setError('Google Sign-In is not configured on this server. Please sign in with your email and password.');
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || '';
-      if (msg.includes('not configured') || msg.includes('GOOGLE_CLIENT_ID') || err.response?.status === 400) {
+      if (msg.includes('not configured') || msg.includes('GOOGLE_CLIENT_ID')) {
         setError('Google Sign-In is not configured on this server. Please sign in with your email and password.');
       } else {
         setError(msg || 'Google Sign-In is temporarily unavailable. Please sign in with your email and password.');

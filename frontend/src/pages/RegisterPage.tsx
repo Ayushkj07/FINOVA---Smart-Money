@@ -36,9 +36,12 @@ export const RegisterPage: React.FC = () => {
       }
       setError('Google Sign-In is not configured on this server. Please complete registration using email and password below.');
     } catch (err: any) {
-      setError(
-        'Google Sign-In is not configured on this server. Please complete your registration using email and password below.'
-      );
+      const msg = err.response?.data?.message || err.message || '';
+      if (msg.includes('not configured') || msg.includes('GOOGLE_CLIENT_ID')) {
+        setError('Google Sign-In is not configured on this server. Please complete registration using email and password below.');
+      } else {
+        setError(msg || 'Unable to initiate Google sign-in. Please ensure the backend is running and try again.');
+      }
     } finally {
       setGoogleLoading(false);
     }
