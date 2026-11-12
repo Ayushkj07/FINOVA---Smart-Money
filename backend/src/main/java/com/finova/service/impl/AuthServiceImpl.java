@@ -167,7 +167,7 @@ public class AuthServiceImpl implements AuthService {
                 .isVerified(false) // Pending OTP verification
                 .accountStatus("PENDING_VERIFICATION")
                 .verificationToken(verificationToken)
-                .roles(Collections.singleton(studentRole))
+                .roles(new HashSet<>(Collections.singleton(studentRole)))
                 .build();
 
         user = userRepository.save(user);
@@ -402,7 +402,7 @@ public class AuthServiceImpl implements AuthService {
                 .isActive(true)
                 .isVerified(true)
                 .accountStatus("ACTIVE")
-                .roles(Set.of(adminRole))
+                .roles(new HashSet<>(Collections.singleton(adminRole)))
                 .build();
         admin.setEmailVerified(true);
         admin = userRepository.save(admin);

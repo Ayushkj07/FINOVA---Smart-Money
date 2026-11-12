@@ -3,8 +3,10 @@ package com.finova.config;
 import com.finova.entity.*;
 import com.finova.entity.enums.*;
 import com.finova.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,9 @@ import java.util.*;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
+
+    @Autowired(required = false)
+    private JdbcTemplate jdbcTemplate;
 
     @Value("${app.admin.initial-email:${FINOVA_ADMIN_EMAIL:${INITIAL_ADMIN_EMAIL:}}}")
     private String initialAdminEmail;
@@ -47,6 +52,9 @@ public class DataInitializer implements CommandLineRunner {
     @Transactional
     public void run(String... args) {
         log.info("Initializing FINOVA default seed data...");
+
+        // Ensure users.password_hash is nullable for Google OAuth users
+        ensurePasswordHashNullable();
 
         // 1. Roles
         Role studentRole = roleRepository.findByName(RoleType.ROLE_STUDENT)
@@ -90,7 +98,7 @@ public class DataInitializer implements CommandLineRunner {
                     .password(passwordEncoder.encode("Student@1234"))
                     .isActive(true)
                     .isVerified(true)
-                    .roles(Set.of(studentRole))
+                    .roles(new HashSet<>(Collections.singleton(studentRole)))
                     .build();
             student = userRepository.save(student);
 
@@ -418,6 +426,22 @@ public class DataInitializer implements CommandLineRunner {
             sb.append(chars.charAt(random.nextInt(chars.length())));
         }
         return sb.toString();
+    }
+
+    private void ensurePasswordHashNullable() {
+        if (jdbcTemplate != null) {
+            try {
+                jdbcTemplate.execute("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL");
+                log.info("Verified users.password_hash column is nullable.");
+            } catch (Exception e1) {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NULL");
+                    log.info("Verified users.password_hash column is nullable (MySQL syntax).");
+                } catch (Exception e2) {
+                    log.debug("Database column password_hash nullable status: {}", e2.getMessage());
+                }
+            }
+        }
     }
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DataInitializer.class);

@@ -597,7 +597,7 @@ public class GoogleOAuthServiceImpl implements GoogleOAuthService {
                         .isVerified(true) // Verified by Google OpenID Connect
                         .accountStatus("ACTIVE")
                         .profilePictureUrl(finalProfilePic)
-                        .roles(Collections.singleton(studentRole))
+                        .roles(new HashSet<>(Collections.singleton(studentRole)))
                         .build();
                 newUser = userRepository.save(newUser);
 

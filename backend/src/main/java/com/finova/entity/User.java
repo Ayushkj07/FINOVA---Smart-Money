@@ -77,7 +77,7 @@ public class User {
         this.verificationToken = verificationToken;
         this.resetPasswordToken = resetPasswordToken;
         this.resetPasswordExpiry = resetPasswordExpiry;
-        this.roles = roles != null ? roles : new HashSet<>();
+        this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
         this.profile = profile;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
         this.updatedAt = updatedAt != null ? updatedAt : Instant.now();
@@ -203,7 +203,7 @@ public class User {
     }
 
     public void setRoles(Set<Role> roles) {
-        this.roles = roles;
+        this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
     }
 
     public UserProfile getProfile() {
@@ -315,7 +315,7 @@ public class User {
         }
 
         public UserBuilder roles(Set<Role> roles) {
-            this.roles = roles;
+            this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
             return this;
         }
 
@@ -348,7 +348,7 @@ public class User {
             instance.setVerificationToken(this.verificationToken);
             instance.setResetPasswordToken(this.resetPasswordToken);
             instance.setResetPasswordExpiry(this.resetPasswordExpiry);
-            instance.setRoles(this.roles);
+            instance.setRoles(this.roles != null ? new HashSet<>(this.roles) : new HashSet<>());
             instance.setProfile(this.profile);
             instance.setCreatedAt(this.createdAt != null ? this.createdAt : Instant.now());
             instance.setUpdatedAt(this.updatedAt != null ? this.updatedAt : Instant.now());
