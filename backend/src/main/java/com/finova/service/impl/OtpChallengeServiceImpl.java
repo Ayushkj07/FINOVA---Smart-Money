@@ -106,7 +106,7 @@ public class OtpChallengeServiceImpl implements OtpChallengeService {
         loginOtpChallengeRepository.save(challenge);
 
         // Deliver OTP via real email service
-        emailService.sendLoginOtpEmail(cleanEmail, fullName, otp, expirationMinutes);
+        emailService.sendVerificationOtpEmail(cleanEmail, fullName, otp, expirationMinutes);
         log.info("Issued secure OTP challenge for user {} (expires in {} minutes)", cleanEmail, expirationMinutes);
 
         return new GoogleAuthResponse(
@@ -116,7 +116,7 @@ public class OtpChallengeServiceImpl implements OtpChallengeService {
                 maskEmail(cleanEmail),
                 expirationMinutes * 60L,
                 (long) resendCooldownSeconds,
-                "A 6-digit verification code has been sent to " + maskEmail(cleanEmail)
+                "A 6-digit verification code has been dispatched to " + maskEmail(cleanEmail)
         );
     }
 
@@ -163,6 +163,9 @@ public class OtpChallengeServiceImpl implements OtpChallengeService {
         User user = challenge.getUser();
         user.setLastLogin(Instant.now());
         user.setIsVerified(true);
+        user.setEmailVerified(true);
+        user.setIsActive(true);
+        user.setAccountStatus("ACTIVE");
         userRepository.save(user);
 
         // Issue real FINOVA Access and Refresh Tokens

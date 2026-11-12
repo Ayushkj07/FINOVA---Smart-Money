@@ -22,6 +22,9 @@ public class User {
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
+    @Column(name = "profile_picture_url", length = 500)
+    private String profilePictureUrl;
+
     @Column(name = "is_active")
     private Boolean isActive = true;
 
@@ -110,6 +113,17 @@ public class User {
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
+    }
+
+    public String getProfilePictureUrl() {
+        return this.profilePictureUrl != null ? this.profilePictureUrl : (this.profile != null ? this.profile.getAvatarUrl() : null);
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
+        if (this.profile != null && profilePictureUrl != null) {
+            this.profile.setAvatarUrl(profilePictureUrl);
+        }
     }
 
     public Boolean getIsActive() {
@@ -232,6 +246,7 @@ public class User {
         private String verificationToken;
         private String resetPasswordToken;
         private Instant resetPasswordExpiry;
+        private String profilePictureUrl;
         private Set<Role> roles = new HashSet<>();
         private UserProfile profile;
         private Instant createdAt;
@@ -256,6 +271,11 @@ public class User {
 
         public UserBuilder fullName(String fullName) {
             this.fullName = fullName;
+            return this;
+        }
+
+        public UserBuilder profilePictureUrl(String profilePictureUrl) {
+            this.profilePictureUrl = profilePictureUrl;
             return this;
         }
 
@@ -320,6 +340,7 @@ public class User {
             instance.setEmail(this.email);
             instance.setPassword(this.password);
             instance.setFullName(this.fullName);
+            instance.setProfilePictureUrl(this.profilePictureUrl);
             instance.setIsActive(this.isActive != null ? this.isActive : true);
             instance.setIsVerified(this.isVerified != null ? this.isVerified : false);
             instance.setAccountStatus(this.accountStatus != null ? this.accountStatus : "ACTIVE");

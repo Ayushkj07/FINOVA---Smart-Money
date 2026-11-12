@@ -32,26 +32,41 @@ export interface User {
 }
 
 export interface AuthResponse {
-  token: string;
-  tokenType: string;
-  refreshToken: string;
-  id: number;
-  email: string;
-  fullName: string;
-  roles: string[];
+  token?: string;
+  tokenType?: string;
+  refreshToken?: string;
+  id?: number;
+  email?: string;
+  fullName?: string;
+  roles?: string[];
   collegeName?: string;
-  currency: string;
+  currency?: string;
   studentStatus?: string;
+  profilePictureUrl?: string;
+  otpRequired?: boolean;
+  challengeId?: string;
+  maskedEmail?: string;
+  expiresInSeconds?: number;
+  resendCooldownSeconds?: number;
 }
 
 export interface GoogleAuthChallengeResponse {
-  challengeRequired: boolean;
-  challengeId: string;
-  email: string;
-  maskedEmail: string;
-  expiresInSeconds: number;
-  resendCooldownSeconds: number;
-  message: string;
+  challengeRequired?: boolean;
+  challengeId?: string;
+  email?: string;
+  maskedEmail?: string;
+  expiresInSeconds?: number;
+  resendCooldownSeconds?: number;
+  message?: string;
+  token?: string;
+  refreshToken?: string;
+  id?: number;
+  fullName?: string;
+  roles?: string[];
+  collegeName?: string;
+  currency?: string;
+  studentStatus?: string;
+  profilePictureUrl?: string;
 }
 
 export interface DashboardSummary {

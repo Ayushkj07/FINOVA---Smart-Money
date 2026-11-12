@@ -318,7 +318,7 @@ export const AdminPage: React.FC = () => {
             {(auditLogs.length > 0 ? auditLogs : [
               { id: 1, action: 'USER_REGISTERED', details: 'Student alex@stanford.edu registered successfully', timestamp: '2026-11-07 18:20:00' },
               { id: 2, action: 'BUDGET_THRESHOLD_ALERT', details: 'Budget alert triggered: Food exceeded 70% threshold', timestamp: '2026-11-07 18:45:12' },
-              { id: 3, action: 'ADMIN_LOGIN', details: 'Admin admin@finova.com authenticated from local network', timestamp: '2026-11-07 19:10:00' },
+              { id: 3, action: 'ADMIN_LOGIN', details: 'Platform administrator authenticated from secure session', timestamp: '2026-11-07 19:10:00' },
             ]).map((log: any) => (
               <div key={log.id} className="p-4 flex items-center justify-between text-xs">
                 <div>

@@ -1,5 +1,6 @@
 package com.finova.integration.google.controller;
 
+import com.finova.exception.BadRequestException;
 import com.finova.integration.google.dto.*;
 import com.finova.integration.google.entity.GoogleSyncLog;
 import com.finova.integration.google.repository.GoogleSyncLogRepository;
@@ -80,6 +81,19 @@ public class GoogleIntegrationController {
     public ResponseEntity<Map<String, String>> revokeTokens(@AuthenticationPrincipal UserPrincipal userPrincipal) {
         googleOAuthService.revokeAllPermissions(userPrincipal.getId());
         return ResponseEntity.ok(Map.of("message", "All Google permissions have been revoked."));
+    }
+
+    @PostMapping("/config")
+    @Operation(summary = "Update Google OAuth credentials dynamically at runtime")
+    public ResponseEntity<Map<String, String>> updateConfig(@RequestBody Map<String, String> payload) {
+        String newClientId = payload.get("clientId");
+        String newClientSecret = payload.get("clientSecret");
+        String newRedirectUri = payload.get("redirectUri");
+        if (newClientId == null || newClientId.isBlank() || newClientSecret == null || newClientSecret.isBlank()) {
+            throw new BadRequestException("Both clientId and clientSecret are required.");
+        }
+        googleOAuthService.updateCredentials(newClientId, newClientSecret, newRedirectUri);
+        return ResponseEntity.ok(Map.of("message", "Google OAuth credentials updated successfully."));
     }
 
     // --- Google Calendar Endpoints ---

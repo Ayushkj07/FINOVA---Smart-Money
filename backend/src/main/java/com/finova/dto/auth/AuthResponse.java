@@ -4,7 +4,6 @@ import java.util.List;
 
 public class AuthResponse {
 
-
     private String token;
     private String tokenType = "Bearer";
     private String refreshToken;
@@ -15,11 +14,18 @@ public class AuthResponse {
     private String collegeName;
     private String currency;
     private String studentStatus;
+    private String profilePictureUrl;
 
+    // Challenge & OTP verification attributes
+    private boolean otpRequired = false;
+    private String challengeId;
+    private String maskedEmail;
+    private Long expiresInSeconds;
+    private Long resendCooldownSeconds;
 
     public AuthResponse() {}
 
-    public AuthResponse(String token, String tokenType, String refreshToken, Long id, String email, String fullName, List<String> roles, String collegeName, String currency, String studentStatus) {
+    public AuthResponse(String token, String tokenType, String refreshToken, Long id, String email, String fullName, List<String> roles, String collegeName, String currency, String studentStatus, String profilePictureUrl) {
         this.token = token;
         this.tokenType = tokenType;
         this.refreshToken = refreshToken;
@@ -30,6 +36,7 @@ public class AuthResponse {
         this.collegeName = collegeName;
         this.currency = currency;
         this.studentStatus = studentStatus;
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     public String getToken() {
@@ -112,13 +119,61 @@ public class AuthResponse {
         this.studentStatus = studentStatus;
     }
 
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
+    }
+
+    public boolean isOtpRequired() {
+        return otpRequired;
+    }
+
+    public void setOtpRequired(boolean otpRequired) {
+        this.otpRequired = otpRequired;
+    }
+
+    public String getChallengeId() {
+        return challengeId;
+    }
+
+    public void setChallengeId(String challengeId) {
+        this.challengeId = challengeId;
+    }
+
+    public String getMaskedEmail() {
+        return maskedEmail;
+    }
+
+    public void setMaskedEmail(String maskedEmail) {
+        this.maskedEmail = maskedEmail;
+    }
+
+    public Long getExpiresInSeconds() {
+        return expiresInSeconds;
+    }
+
+    public void setExpiresInSeconds(Long expiresInSeconds) {
+        this.expiresInSeconds = expiresInSeconds;
+    }
+
+    public Long getResendCooldownSeconds() {
+        return resendCooldownSeconds;
+    }
+
+    public void setResendCooldownSeconds(Long resendCooldownSeconds) {
+        this.resendCooldownSeconds = resendCooldownSeconds;
+    }
+
     public static AuthResponseBuilder builder() {
         return new AuthResponseBuilder();
     }
 
     public static class AuthResponseBuilder {
         private String token;
-        private String tokenType;
+        private String tokenType = "Bearer";
         private String refreshToken;
         private Long id;
         private String email;
@@ -127,6 +182,12 @@ public class AuthResponse {
         private String collegeName;
         private String currency;
         private String studentStatus;
+        private String profilePictureUrl;
+        private boolean otpRequired = false;
+        private String challengeId;
+        private String maskedEmail;
+        private Long expiresInSeconds;
+        private Long resendCooldownSeconds;
 
         public AuthResponseBuilder() {}
 
@@ -180,6 +241,36 @@ public class AuthResponse {
             return this;
         }
 
+        public AuthResponseBuilder profilePictureUrl(String profilePictureUrl) {
+            this.profilePictureUrl = profilePictureUrl;
+            return this;
+        }
+
+        public AuthResponseBuilder otpRequired(boolean otpRequired) {
+            this.otpRequired = otpRequired;
+            return this;
+        }
+
+        public AuthResponseBuilder challengeId(String challengeId) {
+            this.challengeId = challengeId;
+            return this;
+        }
+
+        public AuthResponseBuilder maskedEmail(String maskedEmail) {
+            this.maskedEmail = maskedEmail;
+            return this;
+        }
+
+        public AuthResponseBuilder expiresInSeconds(Long expiresInSeconds) {
+            this.expiresInSeconds = expiresInSeconds;
+            return this;
+        }
+
+        public AuthResponseBuilder resendCooldownSeconds(Long resendCooldownSeconds) {
+            this.resendCooldownSeconds = resendCooldownSeconds;
+            return this;
+        }
+
         public AuthResponse build() {
             AuthResponse instance = new AuthResponse();
             instance.setToken(this.token);
@@ -192,6 +283,12 @@ public class AuthResponse {
             instance.setCollegeName(this.collegeName);
             instance.setCurrency(this.currency);
             instance.setStudentStatus(this.studentStatus);
+            instance.setProfilePictureUrl(this.profilePictureUrl);
+            instance.setOtpRequired(this.otpRequired);
+            instance.setChallengeId(this.challengeId);
+            instance.setMaskedEmail(this.maskedEmail);
+            instance.setExpiresInSeconds(this.expiresInSeconds);
+            instance.setResendCooldownSeconds(this.resendCooldownSeconds);
             return instance;
         }
     }

@@ -11,6 +11,7 @@ export const OtpVerificationPage: React.FC = () => {
   // Retrieve challenge parameters from URL query params
   const [challengeId, setChallengeId] = useState<string>(() => searchParams.get('challengeId') || '');
   const [maskedEmail, setMaskedEmail] = useState<string>(() => searchParams.get('maskedEmail') || 'your email');
+  const flow = searchParams.get('flow') || 'REGISTRATION';
 
   // 6 separate digit slots
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
@@ -29,7 +30,7 @@ export const OtpVerificationPage: React.FC = () => {
   // Focus the first digit input on mount
   useEffect(() => {
     if (!challengeId) {
-      setError('No active verification challenge found. Please sign in with Google again.');
+      setError('No active verification challenge found. Please register or sign in again.');
     }
     inputRefs.current[0]?.focus();
   }, [challengeId]);
@@ -59,13 +60,10 @@ export const OtpVerificationPage: React.FC = () => {
   };
 
   const handleDigitChange = (index: number, value: string) => {
-    // Only accept numeric input
     const cleanValue = value.replace(/\D/g, '');
-
     const newDigits = [...otpDigits];
 
     if (cleanValue.length > 1) {
-      // Handle paste directly into field
       const pastedDigits = cleanValue.slice(0, 6).split('');
       for (let i = 0; i < 6; i++) {
         newDigits[i] = pastedDigits[i] || '';
@@ -128,7 +126,7 @@ export const OtpVerificationPage: React.FC = () => {
         } else {
           navigate('/dashboard', { replace: true });
         }
-      }, 1000);
+      }, 900);
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Invalid or expired verification code.';
       setError(msg);
@@ -186,9 +184,13 @@ export const OtpVerificationPage: React.FC = () => {
             <div className="w-14 h-14 rounded-2xl bg-lavender-100 text-primary flex items-center justify-center mb-4 shadow-sm shadow-primary/10">
               <ShieldCheck className="w-7 h-7" />
             </div>
-            <h2 className="text-xl font-extrabold text-finova-text">Two-Factor Email Verification</h2>
+            <h2 className="text-xl font-extrabold text-finova-text">
+              {flow === 'REGISTRATION' ? 'Verify Your Account' : 'Two-Factor Verification'}
+            </h2>
             <p className="mt-2 text-xs text-finova-muted max-w-sm">
-              We've dispatched a 6-digit single-use security code to your verified Google account:
+              {flow === 'REGISTRATION'
+                ? "We've dispatched a 6-digit verification code to activate your new FINOVA account:"
+                : "We've dispatched a 6-digit security code to your registered email address:"}
             </p>
             <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-finova-text">
               <Mail className="w-3.5 h-3.5 text-primary" />
@@ -240,64 +242,53 @@ export const OtpVerificationPage: React.FC = () => {
                     disabled={loading || expiresIn <= 0}
                     onChange={(e) => handleDigitChange(idx, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(idx, e)}
-                    className={`w-12 h-14 text-center text-xl font-extrabold rounded-xl border bg-white text-finova-text transition-all focus:outline-none ${
-                      digit
-                        ? 'border-primary ring-2 ring-primary/20 bg-lavender-50/20'
-                        : 'border-finova-border focus:border-primary focus:ring-2 focus:ring-primary/20'
-                    } ${expiresIn <= 0 ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`}
+                    className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl font-bold rounded-2xl border border-finova-border bg-white text-finova-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
                   />
                 ))}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              <button
-                type="submit"
-                disabled={!isComplete || loading || expiresIn <= 0}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-primary hover:bg-primary-dark shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <span>Verify & Continue</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-              <div className="flex items-center justify-between pt-2 text-xs">
-                <span className="text-finova-muted">Didn't receive the code?</span>
-                <button
-                  type="button"
-                  disabled={resendCooldown > 0 || resending}
-                  onClick={handleResend}
-                  className="font-bold text-primary hover:text-primary-dark disabled:text-finova-muted disabled:cursor-not-allowed inline-flex items-center gap-1 transition-colors"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${resending ? 'animate-spin' : ''}`} />
-                  <span>
-                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
-                  </span>
-                </button>
-              </div>
-            </div>
+            <button
+              type="submit"
+              disabled={!isComplete || loading || expiresIn <= 0}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-white bg-primary hover:bg-primary-dark shadow-sm hover:shadow transition-all disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>Verify &amp; Launch Workspace</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
           </form>
 
-          {/* Security Notice */}
-          <div className="mt-8 pt-6 border-t border-finova-border text-center space-y-3">
-            <p className="text-[11px] text-finova-muted leading-relaxed">
-              For your account security, single-use codes expire in 5 minutes. Never share this code with anyone.
-            </p>
-            <div>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-1 text-xs font-bold text-finova-text hover:text-primary transition-colors"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Return to Login</span>
-              </Link>
-            </div>
+          {/* Resend & Back controls */}
+          <div className="mt-6 pt-6 border-t border-finova-border flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resendCooldown > 0 || resending}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary-dark disabled:text-finova-muted transition-colors cursor-pointer disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${resending ? 'animate-spin' : ''}`} />
+              <span>
+                {resending
+                  ? 'Dispatching new code...'
+                  : resendCooldown > 0
+                  ? `Resend code in ${resendCooldown}s`
+                  : 'Resend verification code'}
+              </span>
+            </button>
+
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-finova-muted hover:text-finova-text transition-colors mt-1"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Sign In</span>
+            </Link>
           </div>
         </div>
       </div>

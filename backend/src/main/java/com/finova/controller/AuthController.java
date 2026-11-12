@@ -44,10 +44,50 @@ public class AuthController {
         return ResponseEntity.ok(authService.register(request));
     }
 
+    @GetMapping("/google")
+    @Operation(summary = "Generate Google OAuth authorization URL")
+    public ResponseEntity<Map<String, String>> getGoogleConnectUrl(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestParam(defaultValue = "AUTH") String service,
+            @RequestParam(required = false) String redirectUri) {
+        Long userId = userPrincipal != null ? userPrincipal.getId() : null;
+        var res = googleOAuthService.getAuthorizationUrl(userId, service, redirectUri);
+        return ResponseEntity.ok(Map.of("authUrl", res.getAuthUrl(), "state", res.getState()));
+    }
+
     @PostMapping("/google")
-    @Operation(summary = "Authenticate with Google and generate 6-digit Email OTP challenge")
+    @Operation(summary = "Authenticate with Google and issue direct session or OTP challenge")
     public ResponseEntity<GoogleAuthResponse> googleAuth(@RequestBody GoogleAuthRequest request) {
         return ResponseEntity.ok(googleOAuthService.authenticateWithGoogle(request));
+    }
+
+    @GetMapping("/google/status")
+    @Operation(summary = "Check whether Google OAuth is configured on server")
+    public ResponseEntity<Map<String, Boolean>> getGoogleStatus() {
+        return ResponseEntity.ok(Map.of("configured", googleOAuthService.isConfigured()));
+    }
+
+    @PostMapping("/google/link")
+    @Operation(summary = "Link Google OAuth account to authenticated user")
+    public ResponseEntity<Map<String, String>> linkGoogle(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestBody Map<String, String> payload) {
+        if (userPrincipal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Authentication required to link Google account."));
+        }
+        googleOAuthService.linkGoogleAccount(userPrincipal.getId(), payload.get("code"), payload.get("state"), payload.get("redirectUri"));
+        return ResponseEntity.ok(Map.of("message", "Google account successfully linked to your FINOVA profile."));
+    }
+
+    @PostMapping("/google/unlink")
+    @Operation(summary = "Unlink Google OAuth account from authenticated user")
+    public ResponseEntity<Map<String, String>> unlinkGoogle(
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        if (userPrincipal == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Authentication required to unlink Google account."));
+        }
+        googleOAuthService.unlinkGoogleAccount(userPrincipal.getId());
+        return ResponseEntity.ok(Map.of("message", "Google account successfully unlinked."));
     }
 
     @PostMapping("/otp/verify")
@@ -56,9 +96,21 @@ public class AuthController {
         return ResponseEntity.ok(otpChallengeService.verifyOtp(request));
     }
 
+    @PostMapping("/verify-email")
+    @Operation(summary = "Verify student email using OTP")
+    public ResponseEntity<AuthResponse> verifyEmailOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        return ResponseEntity.ok(otpChallengeService.verifyOtp(request));
+    }
+
     @PostMapping("/otp/resend")
     @Operation(summary = "Resend 6-digit email OTP verification code with 60s cooldown")
     public ResponseEntity<GoogleAuthResponse> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
+        return ResponseEntity.ok(otpChallengeService.resendOtp(request));
+    }
+
+    @PostMapping("/resend-otp")
+    @Operation(summary = "Resend 6-digit email OTP verification code")
+    public ResponseEntity<GoogleAuthResponse> resendOtpAlias(@Valid @RequestBody ResendOtpRequest request) {
         return ResponseEntity.ok(otpChallengeService.resendOtp(request));
     }
 
@@ -119,5 +171,18 @@ public class AuthController {
     public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/admin-setup-status")
+    @Operation(summary = "Check whether platform initial administrator has been provisioned")
+    public ResponseEntity<Map<String, Boolean>> getAdminSetupStatus() {
+        return ResponseEntity.ok(Map.of("configured", authService.isInitialAdminConfigured()));
+    }
+
+    @PostMapping("/setup-initial-admin")
+    @Operation(summary = "Secure one-time setup for the platform administrator (only available when no admin exists)")
+    public ResponseEntity<Map<String, String>> setupInitialAdmin(@Valid @RequestBody InitialAdminSetupRequest request) {
+        authService.setupInitialAdmin(request);
+        return ResponseEntity.ok(Map.of("message", "Administrator account provisioned successfully. You may now log in."));
     }
 }

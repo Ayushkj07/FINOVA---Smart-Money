@@ -13,4 +13,6 @@ public interface AuthService {
     void forgotPassword(ForgotPasswordRequest request);
     void resetPassword(ResetPasswordRequest request);
     void verifyEmail(String token);
+    boolean isInitialAdminConfigured();
+    void setupInitialAdmin(InitialAdminSetupRequest request);
 }

@@ -50,36 +50,37 @@ export const GoogleCallbackPage: React.FC = () => {
           setStatus('success');
           
           if (res.data?.challengeRequired && res.data?.challengeId) {
+            const challengeId = res.data.challengeId;
+            const maskedEmail = res.data.maskedEmail || '';
             setTimeout(() => {
               navigate(
-                `/verify-otp?challengeId=${encodeURIComponent(res.data.challengeId)}&maskedEmail=${encodeURIComponent(
-                  res.data.maskedEmail || ''
-                )}`,
+                `/verify-otp?challengeId=${encodeURIComponent(challengeId)}&maskedEmail=${encodeURIComponent(maskedEmail)}`,
                 { replace: true }
               );
             }, 800);
             return;
           }
 
-          // Fallback if token was returned directly
-          if ((res.data as any)?.token) {
-            const authData: any = res.data;
-            localStorage.setItem('finova_token', authData.token);
-            if (authData.refreshToken) {
-              localStorage.setItem('finova_refresh_token', authData.refreshToken);
+          // Direct Google Sign-In with verified identity
+          if (res.data?.token) {
+            const token = res.data.token;
+            localStorage.setItem('finova_token', token);
+            if (res.data.refreshToken) {
+              localStorage.setItem('finova_refresh_token', res.data.refreshToken);
             }
             const userObj = {
-              id: authData.id,
-              email: authData.email,
-              fullName: authData.fullName,
-              roles: authData.roles,
-              currency: authData.currency,
-              collegeName: authData.collegeName,
+              id: res.data.id || 0,
+              email: res.data.email || '',
+              fullName: res.data.fullName || '',
+              roles: res.data.roles || [],
+              currency: res.data.currency || 'INR',
+              collegeName: res.data.collegeName,
+              avatarUrl: res.data.profilePictureUrl,
             };
             localStorage.setItem('finova_user', JSON.stringify(userObj));
             setTimeout(() => {
               window.location.href = '/dashboard';
-            }, 800);
+            }, 600);
             return;
           }
         } else {

@@ -21,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.finova.dto.auth.GoogleAuthResponse;
+import com.finova.service.EmailService;
+import com.finova.service.OtpChallengeService;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -34,6 +37,8 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
+    private final OtpChallengeService otpChallengeService;
+    private final EmailService emailService;
 
     @Value("${app.jwt.refresh-expiration-ms:604800000}")
     private long refreshExpirationInMs;
@@ -44,7 +49,9 @@ public class AuthServiceImpl implements AuthService {
                            UserProfileRepository userProfileRepository,
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder,
-                           JwtTokenProvider tokenProvider) {
+                           JwtTokenProvider tokenProvider,
+                           OtpChallengeService otpChallengeService,
+                           EmailService emailService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -52,19 +59,45 @@ public class AuthServiceImpl implements AuthService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
+        this.otpChallengeService = otpChallengeService;
+        this.emailService = emailService;
     }
 
     @Override
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        String email = request.getEmail().toLowerCase().trim();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadRequestException("Invalid email or password. Please verify your credentials."));
+
+        if (user.getPassword() == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new BadRequestException("Invalid email or password. Please verify your credentials.");
+        }
+
+        if (!Boolean.TRUE.equals(user.getIsActive())) {
+            throw new BadRequestException("Your account has been deactivated. Please contact support.");
+        }
+
+        // If student account is unverified, require email OTP verification before login
+        if (!Boolean.TRUE.equals(user.getIsVerified())) {
+            GoogleAuthResponse challenge = otpChallengeService.createOtpChallenge(user, user.getEmail(), user.getFullName());
+            return AuthResponse.builder()
+                    .otpRequired(true)
+                    .challengeId(challenge.getChallengeId())
+                    .maskedEmail(challenge.getMaskedEmail())
+                    .email(user.getEmail())
+                    .fullName(user.getFullName())
+                    .expiresInSeconds(challenge.getExpiresInSeconds())
+                    .resendCooldownSeconds(challenge.getResendCooldownSeconds())
+                    .build();
+        }
+
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail().toLowerCase().trim(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(email, request.getPassword())
         );
 
         String jwt = tokenProvider.generateToken(authentication);
-
-        User user = userRepository.findByEmail(request.getEmail().toLowerCase().trim())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + request.getEmail()));
 
         // Update last login timestamp
         user.setLastLogin(Instant.now());
@@ -98,6 +131,7 @@ public class AuthServiceImpl implements AuthService {
                 .collegeName(profile != null ? profile.getCollegeName() : null)
                 .currency(profile != null ? profile.getCurrency() : "INR")
                 .studentStatus(profile != null ? profile.getStudentStatus() : "ACTIVE_STUDENT")
+                .otpRequired(false)
                 .build();
     }
 
@@ -105,7 +139,11 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            throw new BadRequestException("Passwords do not match");
+            throw new BadRequestException("Passwords do not match. Please re-enter your password.");
+        }
+
+        if (request.getPassword().length() < 8) {
+            throw new BadRequestException("Password must be at least 8 characters long.");
         }
 
         String email = request.getEmail().toLowerCase().trim();
@@ -126,9 +164,8 @@ public class AuthServiceImpl implements AuthService {
                 .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .isActive(true)
-                .isVerified(true) // Verified and active for immediate student access
-                .accountStatus("ACTIVE")
-                .lastLogin(Instant.now())
+                .isVerified(false) // Pending OTP verification
+                .accountStatus("PENDING_VERIFICATION")
                 .verificationToken(verificationToken)
                 .roles(Collections.singleton(studentRole))
                 .build();
@@ -147,32 +184,19 @@ public class AuthServiceImpl implements AuthService {
         userProfileRepository.save(profile);
         user.setProfile(profile);
 
-        // Auto login on register
-        String rolesStr = RoleType.ROLE_STUDENT.name();
-        String jwt = tokenProvider.generateTokenFromUser(user.getId(), user.getEmail(), user.getFullName(), rolesStr);
+        // Generate and dispatch 6-digit Email OTP Verification challenge
+        GoogleAuthResponse challenge = otpChallengeService.createOtpChallenge(user, user.getEmail(), user.getFullName());
 
-        String refreshTokenStr = UUID.randomUUID().toString();
-        RefreshToken refreshToken = RefreshToken.builder()
-                .user(user)
-                .token(refreshTokenStr)
-                .expiryDate(Instant.now().plusMillis(refreshExpirationInMs))
-                .revoked(false)
-                .build();
-        refreshTokenRepository.save(refreshToken);
-
-        log.info("New student registered successfully: id={}, email={}", user.getId(), user.getEmail());
+        log.info("New student registered (pending OTP verification): id={}, email={}", user.getId(), user.getEmail());
 
         return AuthResponse.builder()
-                .token(jwt)
-                .tokenType("Bearer")
-                .refreshToken(refreshTokenStr)
-                .id(user.getId())
+                .otpRequired(true)
+                .challengeId(challenge.getChallengeId())
+                .maskedEmail(challenge.getMaskedEmail())
                 .email(user.getEmail())
                 .fullName(user.getFullName())
-                .roles(Collections.singletonList(rolesStr))
-                .collegeName(profile.getCollegeName())
-                .currency(profile.getCurrency())
-                .studentStatus(profile.getStudentStatus())
+                .expiresInSeconds(challenge.getExpiresInSeconds())
+                .resendCooldownSeconds(challenge.getResendCooldownSeconds())
                 .build();
     }
 
@@ -320,7 +344,8 @@ public class AuthServiceImpl implements AuthService {
             user.setResetPasswordToken(token);
             user.setResetPasswordExpiry(Instant.now().plusSeconds(3600)); // 1 hour
             userRepository.save(user);
-            log.info("Password reset token generated for user {}: {}", user.getEmail(), token);
+            emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), token);
+            log.info("Dispatched password reset token for registered account");
         }
     }
 
@@ -338,5 +363,59 @@ public class AuthServiceImpl implements AuthService {
         user.setResetPasswordToken(null);
         user.setResetPasswordExpiry(null);
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isInitialAdminConfigured() {
+        Role adminRole = roleRepository.findByName(RoleType.ROLE_ADMIN).orElse(null);
+        if (adminRole == null) return false;
+        return userRepository.existsByRolesContaining(adminRole);
+    }
+
+    @Override
+    @Transactional
+    public void setupInitialAdmin(InitialAdminSetupRequest request) {
+        Role adminRole = roleRepository.findByName(RoleType.ROLE_ADMIN)
+                .orElseGet(() -> roleRepository.save(Role.builder()
+                        .name(RoleType.ROLE_ADMIN)
+                        .description("Platform administrator")
+                        .build()));
+
+        boolean adminExists = userRepository.existsByRolesContaining(adminRole);
+        if (adminExists) {
+            boolean activeAdminExists = userRepository.findByRolesContaining(adminRole).stream()
+                    .anyMatch(u -> Boolean.TRUE.equals(u.getIsActive()));
+            if (activeAdminExists) {
+                throw new BadRequestException("An administrator account is already established. Initial admin setup is permanently locked.");
+            }
+        }
+
+        if (userRepository.existsByEmail(request.getEmail().toLowerCase().trim())) {
+            throw new BadRequestException("An account with this email already exists.");
+        }
+
+        User admin = User.builder()
+                .email(request.getEmail().trim().toLowerCase())
+                .fullName(request.getFullName().trim())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .isActive(true)
+                .isVerified(true)
+                .accountStatus("ACTIVE")
+                .roles(Set.of(adminRole))
+                .build();
+        admin.setEmailVerified(true);
+        admin = userRepository.save(admin);
+
+        UserProfile adminProfile = UserProfile.builder()
+                .user(admin)
+                .collegeName("Platform Administration")
+                .studentStatus("Administrator")
+                .currency("INR")
+                .timezone("Asia/Kolkata")
+                .build();
+        userProfileRepository.save(adminProfile);
+
+        log.info("Administrator account successfully created via secure initial-setup endpoint: {}", admin.getEmail());
     }
 }

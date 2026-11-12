@@ -58,7 +58,7 @@ public class SecurityConfig {
                 // Public authentication and documentation endpoints
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/public/**").permitAll()
-                .requestMatchers("/api/integrations/google/connect").permitAll()
+                .requestMatchers("/api/integrations/google/connect", "/api/integrations/google/config").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers("/actuator/health", "/api/health").permitAll()

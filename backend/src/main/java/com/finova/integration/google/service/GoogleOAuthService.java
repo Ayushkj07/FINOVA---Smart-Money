@@ -15,4 +15,8 @@ public interface GoogleOAuthService {
     String getValidAccessToken(Long userId);
     GoogleIntegrationStatusResponse getIntegrationStatus(Long userId);
     GoogleAuthResponse authenticateWithGoogle(GoogleAuthRequest request);
+    void linkGoogleAccount(Long userId, String code, String state, String redirectUri);
+    void unlinkGoogleAccount(Long userId);
+    void updateCredentials(String clientId, String clientSecret, String redirectUri);
+    boolean isConfigured();
 }

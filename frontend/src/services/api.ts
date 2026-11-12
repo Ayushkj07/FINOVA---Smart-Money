@@ -79,10 +79,14 @@ api.interceptors.response.use(
       if (refreshToken) {
         try {
           const res = await axios.post<AuthResponse>('/api/auth/refresh', { refreshToken });
-          localStorage.setItem('finova_token', res.data.token);
-          localStorage.setItem('finova_refresh_token', res.data.refreshToken);
-          originalRequest.headers.Authorization = `Bearer ${res.data.token}`;
-          return api(originalRequest);
+          if (res.data.token) {
+            localStorage.setItem('finova_token', res.data.token);
+            if (res.data.refreshToken) {
+              localStorage.setItem('finova_refresh_token', res.data.refreshToken);
+            }
+            originalRequest.headers.Authorization = `Bearer ${res.data.token}`;
+            return api(originalRequest);
+          }
         } catch (refreshErr) {
           localStorage.removeItem('finova_token');
           localStorage.removeItem('finova_refresh_token');
@@ -99,7 +103,7 @@ api.interceptors.response.use(
       const method = (originalRequest.method || 'get').toLowerCase();
 
       // Never mock authentication endpoints - real credentials and real OTP challenges are required
-      if (url.includes('/auth/')) {
+      if (url.includes('/auth/') || url.includes('/integrations/google/connect') || url.includes('/integrations/google/config') || url.includes('/integrations/google/callback')) {
         return Promise.reject(error);
       }
 
@@ -346,6 +350,8 @@ export const adminApi = {
 // --- GOOGLE INTEGRATION SUITE API ---
 export const googleApi = {
   getStatus: () => api.get<GoogleIntegrationStatus>('/integrations/google/status'),
+  updateConfig: (data: { clientId: string; clientSecret: string; redirectUri?: string }) =>
+    api.post<{ message: string }>('/integrations/google/config', data),
   getConnectUrl: (service = 'ALL', redirectUri?: string) => {
     const effectiveRedirectUri =
       redirectUri ||

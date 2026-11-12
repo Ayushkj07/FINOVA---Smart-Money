@@ -80,7 +80,7 @@ export const ForgotPasswordPage: React.FC = () => {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="student@finova.com"
+                    placeholder="you@example.com"
                     className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-finova-border focus:outline-none focus:border-primary text-finova-text bg-white"
                   />
                 </div>

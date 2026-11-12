@@ -69,44 +69,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (data: any): Promise<AuthResponse> => {
     const res = await authApi.login(data);
     const authData = res.data;
-    setToken(authData.token);
-    localStorage.setItem('finova_token', authData.token);
-    localStorage.setItem('finova_refresh_token', authData.refreshToken);
 
-    const userObj: User = {
-      id: authData.id,
-      email: authData.email,
-      fullName: authData.fullName,
-      roles: authData.roles,
-      collegeName: authData.collegeName,
-      currency: authData.currency || 'INR',
-      studentStatus: authData.studentStatus,
-    };
+    // If email OTP verification is required to activate or verify identity
+    if (authData.otpRequired) {
+      return authData;
+    }
 
-    setUser(userObj);
-    localStorage.setItem('finova_user', JSON.stringify(userObj));
+    if (authData.token) {
+      setToken(authData.token);
+      localStorage.setItem('finova_token', authData.token);
+      if (authData.refreshToken) {
+        localStorage.setItem('finova_refresh_token', authData.refreshToken);
+      }
+
+      const userObj: User = {
+        id: authData.id || 0,
+        email: authData.email || '',
+        fullName: authData.fullName || '',
+        roles: authData.roles || [],
+        collegeName: authData.collegeName,
+        currency: authData.currency || 'INR',
+        studentStatus: authData.studentStatus,
+      };
+
+      setUser(userObj);
+      localStorage.setItem('finova_user', JSON.stringify(userObj));
+    }
     return authData;
   };
 
   const register = async (data: any): Promise<AuthResponse> => {
     const res = await authApi.register(data);
     const authData = res.data;
-    setToken(authData.token);
-    localStorage.setItem('finova_token', authData.token);
-    localStorage.setItem('finova_refresh_token', authData.refreshToken);
 
-    const userObj: User = {
-      id: authData.id,
-      email: authData.email,
-      fullName: authData.fullName,
-      roles: authData.roles,
-      collegeName: authData.collegeName,
-      currency: authData.currency || 'INR',
-      studentStatus: authData.studentStatus,
-    };
+    // If email OTP verification is required to activate account
+    if (authData.otpRequired) {
+      return authData;
+    }
 
-    setUser(userObj);
-    localStorage.setItem('finova_user', JSON.stringify(userObj));
+    if (authData.token) {
+      setToken(authData.token);
+      localStorage.setItem('finova_token', authData.token);
+      if (authData.refreshToken) {
+        localStorage.setItem('finova_refresh_token', authData.refreshToken);
+      }
+
+      const userObj: User = {
+        id: authData.id || 0,
+        email: authData.email || '',
+        fullName: authData.fullName || '',
+        roles: authData.roles || [],
+        collegeName: authData.collegeName,
+        currency: authData.currency || 'INR',
+        studentStatus: authData.studentStatus,
+      };
+
+      setUser(userObj);
+      localStorage.setItem('finova_user', JSON.stringify(userObj));
+    }
     return authData;
   };
 
@@ -118,22 +138,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const verifyLoginOtp = async (challengeId: string, otp: string): Promise<AuthResponse> => {
     const res = await googleApi.verifyOtp({ challengeId, otp });
     const authData = res.data;
-    setToken(authData.token);
-    localStorage.setItem('finova_token', authData.token);
-    localStorage.setItem('finova_refresh_token', authData.refreshToken);
+    if (authData.token) {
+      setToken(authData.token);
+      localStorage.setItem('finova_token', authData.token);
+      if (authData.refreshToken) {
+        localStorage.setItem('finova_refresh_token', authData.refreshToken);
+      }
 
-    const userObj: User = {
-      id: authData.id,
-      email: authData.email,
-      fullName: authData.fullName,
-      roles: authData.roles,
-      collegeName: authData.collegeName,
-      currency: authData.currency || 'INR',
-      studentStatus: authData.studentStatus,
-    };
+      const userObj: User = {
+        id: authData.id || 0,
+        email: authData.email || '',
+        fullName: authData.fullName || '',
+        roles: authData.roles || [],
+        collegeName: authData.collegeName,
+        currency: authData.currency || 'INR',
+        studentStatus: authData.studentStatus,
+      };
 
-    setUser(userObj);
-    localStorage.setItem('finova_user', JSON.stringify(userObj));
+      setUser(userObj);
+      localStorage.setItem('finova_user', JSON.stringify(userObj));
+    }
     return authData;
   };
 

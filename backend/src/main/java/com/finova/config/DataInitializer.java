@@ -3,17 +3,25 @@ package com.finova.config;
 import com.finova.entity.*;
 import com.finova.entity.enums.*;
 import com.finova.repository.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.util.*;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
+
+    @Value("${app.admin.initial-email:${FINOVA_ADMIN_EMAIL:${INITIAL_ADMIN_EMAIL:}}}")
+    private String initialAdminEmail;
+
+    @Value("${app.admin.initial-password:${FINOVA_ADMIN_PASSWORD:${INITIAL_ADMIN_PASSWORD:}}}")
+    private String initialAdminPassword;
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
@@ -71,27 +79,8 @@ public class DataInitializer implements CommandLineRunner {
             expenseCategoryRepository.saveAll(categories);
         }
 
-        // 3. Demo Admin User
-        if (!userRepository.existsByEmail("admin@finova.com")) {
-            User admin = User.builder()
-                    .email("admin@finova.com")
-                    .fullName("FINOVA Admin")
-                    .password(passwordEncoder.encode("Admin@1234"))
-                    .isActive(true)
-                    .isVerified(true)
-                    .roles(Set.of(adminRole))
-                    .build();
-            admin = userRepository.save(admin);
-
-            UserProfile adminProfile = UserProfile.builder()
-                    .user(admin)
-                    .collegeName("FINOVA Operations")
-                    .studentStatus("Administrator")
-                    .currency("INR")
-                    .timezone("Asia/Kolkata")
-                    .build();
-            userProfileRepository.save(adminProfile);
-        }
+        // 3. Secure Initial Administrator Provisioning (No hardcoded credentials)
+        provisionInitialAdmin(adminRole);
 
         // 4. Demo Student User (Alex Morgan)
         if (!userRepository.existsByEmail("student@finova.com")) {
@@ -316,6 +305,119 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         log.info("FINOVA default seed data initialized successfully.");
+    }
+
+    private void provisionInitialAdmin(Role adminRole) {
+        // Step A: Invalidate/revoke any legacy compromised admin account with the published default password
+        userRepository.findByEmail("admin@finova.com").ifPresent(compromised -> {
+            if (passwordEncoder.matches("Admin@1234", compromised.getPassword())) {
+                log.warn("Revoking legacy hardcoded credentials for admin@finova.com...");
+                compromised.setPassword(passwordEncoder.encode(generateSecurePassword(32)));
+                compromised.setIsActive(false);
+                userRepository.save(compromised);
+                log.info("Compromised admin@finova.com account has been revoked and deactivated.");
+            }
+        });
+
+        // Step B: Check if admin credentials were provided via environment variables
+        if (initialAdminEmail != null && !initialAdminEmail.isBlank()
+                && initialAdminPassword != null && !initialAdminPassword.isBlank()) {
+            String email = initialAdminEmail.trim().toLowerCase();
+            User admin = userRepository.findByEmail(email).orElseGet(() -> User.builder()
+                    .email(email)
+                    .fullName("FINOVA Platform Administrator")
+                    .build());
+            admin.setPassword(passwordEncoder.encode(initialAdminPassword.trim()));
+            admin.setIsActive(true);
+            admin.setIsVerified(true);
+            admin.setEmailVerified(true);
+            admin.setAccountStatus("ACTIVE");
+            if (admin.getRoles() == null) {
+                admin.setRoles(new HashSet<>());
+            }
+            admin.getRoles().add(adminRole);
+            admin = userRepository.save(admin);
+
+            if (userProfileRepository.findByUserId(admin.getId()).isEmpty()) {
+                UserProfile profile = UserProfile.builder()
+                        .user(admin)
+                        .collegeName("Platform Administration")
+                        .studentStatus("Administrator")
+                        .currency("INR")
+                        .timezone("Asia/Kolkata")
+                        .build();
+                userProfileRepository.save(profile);
+            }
+            log.info("Administrator account configured from environment variables for email: {}", email);
+            return;
+        }
+
+        // Step C: If any active admin already exists, do not overwrite
+        boolean adminExists = userRepository.existsByRolesContaining(adminRole);
+        if (adminExists) {
+            boolean activeAdminExists = userRepository.findByRolesContaining(adminRole).stream()
+                    .anyMatch(u -> Boolean.TRUE.equals(u.getIsActive()));
+            if (activeAdminExists) {
+                log.info("Administrator account already exists. Skipping initial admin setup.");
+                return;
+            }
+        }
+
+        // Step D: No admin configured in environment and none in DB -> generate one-time secure random credentials
+        String generatedPassword = generateSecurePassword(20);
+        String defaultAdminEmail = "admin@finova.local";
+
+        User admin = userRepository.findByEmail(defaultAdminEmail).orElseGet(() -> User.builder()
+                .email(defaultAdminEmail)
+                .fullName("FINOVA Initial Administrator")
+                .build());
+        admin.setPassword(passwordEncoder.encode(generatedPassword));
+        admin.setIsActive(true);
+        admin.setIsVerified(true);
+        admin.setEmailVerified(true);
+        admin.setAccountStatus("ACTIVE");
+        if (admin.getRoles() == null) {
+            admin.setRoles(new HashSet<>());
+        }
+        admin.getRoles().add(adminRole);
+        admin = userRepository.save(admin);
+
+        if (userProfileRepository.findByUserId(admin.getId()).isEmpty()) {
+            UserProfile profile = UserProfile.builder()
+                    .user(admin)
+                    .collegeName("Platform Administration")
+                    .studentStatus("Administrator")
+                    .currency("INR")
+                    .timezone("Asia/Kolkata")
+                    .build();
+            userProfileRepository.save(profile);
+        }
+
+        System.out.println("\n" +
+                "================================================================================\n" +
+                "[SECURITY NOTICE] INITIAL ADMINISTRATOR ACCOUNT PROVISIONED\n" +
+                "--------------------------------------------------------------------------------\n" +
+                "No administrator account was detected and no credentials were configured via\n" +
+                "environment variables (FINOVA_ADMIN_EMAIL / FINOVA_ADMIN_PASSWORD).\n\n" +
+                "An initial administrator account has been generated with a secure random password:\n" +
+                "  Email:              " + defaultAdminEmail + "\n" +
+                "  One-Time Password:  " + generatedPassword + "\n\n" +
+                "ACTION REQUIRED:\n" +
+                "  1. Log in immediately at http://localhost:8080 and change your password.\n" +
+                "  2. This temporary password will NOT be displayed again.\n" +
+                "  3. For production, set FINOVA_ADMIN_EMAIL and FINOVA_ADMIN_PASSWORD in your\n" +
+                "     hosting environment variables before deployment.\n" +
+                "================================================================================\n");
+    }
+
+    private String generateSecurePassword(int length) {
+        final String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DataInitializer.class);
