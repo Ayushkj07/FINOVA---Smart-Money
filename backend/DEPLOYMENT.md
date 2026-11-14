@@ -41,10 +41,11 @@ Under **Environment Variables** in your Render Web Service dashboard, configure:
 
 | Variable Name | Example / Format | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `SPRING_PROFILES_ACTIVE` | `mysql` | **Yes** | Activates MySQL & Flyway production profile |
-| `SPRING_DATASOURCE_URL` | `jdbc:mysql://<host>:<port>/<dbname>?useSSL=true&serverTimezone=UTC` | **Yes** | Remote MySQL JDBC connection string |
-| `SPRING_DATASOURCE_USERNAME` | `<db-user>` | **Yes** | Production database user |
+| `SPRING_PROFILES_ACTIVE` | `prod` | **Yes** *(Default in Docker)* | Activates MySQL production profile with Flyway & HikariCP |
+| `SPRING_DATASOURCE_URL` | `jdbc:mysql://<external-host>:<port>/<dbname>?useSSL=true&serverTimezone=UTC` | **Yes** | Remote managed MySQL JDBC connection string (Do NOT use localhost) |
+| `SPRING_DATASOURCE_USERNAME` | `<db-user>` | **Yes** | Production database username |
 | `SPRING_DATASOURCE_PASSWORD` | `<db-password>` | **Yes** | Production database password |
+| `DATABASE_URL` | `mysql://<user>:<password>@<host>:<port>/<dbname>` | Alternative | Supported cloud URI format (automatically converted to JDBC) |
 | `FINOVA_JWT_SECRET` | *(256-bit base64 / hex key)* | **Yes** | Secret for signing JWT authentication tokens |
 | `CORS_ALLOWED_ORIGINS` | `https://<your-vercel-domain>,http://localhost:8080` | **Yes** | Whitelisted frontend origins |
 | `GOOGLE_CLIENT_ID` | `17334748765-....apps.googleusercontent.com` | **Yes** | Google OAuth Client ID |

@@ -37,6 +37,7 @@ USER finova
 
 # Environment defaults (Render overrides $PORT dynamically)
 ENV PORT=8080
+ENV SPRING_PROFILES_ACTIVE=prod
 ENV UPLOAD_DIR=/var/data/uploads
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Dfile.encoding=UTF-8"
 

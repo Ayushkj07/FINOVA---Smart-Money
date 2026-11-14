@@ -1,0 +1,31 @@
+# ==============================================================================
+# FINOVA – PostgreSQL Profile Configuration
+# Active when SPRING_PROFILES_ACTIVE=postgres
+# ==============================================================================
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:${DATABASE_URL}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${POSTGRES_USER:}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${POSTGRES_PASSWORD:}}}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: FinovaPostgresHikariCP
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:10}
+      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  flyway:
+    # Flyway migrations V1..V6 are written in MySQL DDL. Disable flyway or supply postgres migrations if using postgres.
+    enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false

@@ -18,7 +18,7 @@ spring:
     name: finova-backend
 
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:h2}
+    active: ${SPRING_PROFILES_ACTIVE:prod}
 
   servlet:
     multipart:
@@ -45,58 +45,7 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
-# Profile: MySQL (Production / Standard)
----
-spring:
-  config:
-    activate:
-      on-profile: mysql
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:${DATABASE_URL:jdbc:mysql://localhost:3306/finova_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true}}
-    username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${MYSQL_USER:root}}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${MYSQL_PASSWORD:root}}}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    validate-on-migrate: false
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
-        format_sql: false
-
-# Profile: H2 (Testing / Standalone Dev with Persistent Disk Storage)
----
-spring:
-  config:
-    activate:
-      on-profile: h2
-  datasource:
-    url: ${SPRING_DATASOURCE_H2_URL:jdbc:h2:file:./data/finovadb;DB_CLOSE_DELAY=-1;MODE=MySQL;NON_KEYWORDS=YEAR,MONTH}
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
-  flyway:
-    enabled: false
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
-
-
 # Common Application & Security Settings
----
 app:
   jwt:
     secret: ${FINOVA_JWT_SECRET:${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}} # 256-bit secure secret key

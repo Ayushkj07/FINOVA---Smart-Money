@@ -15,9 +15,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
 
+import org.springframework.test.context.ActiveProfiles;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
+@ActiveProfiles("h2")
 public class GoogleUserRegistrationTest {
 
     @Autowired
