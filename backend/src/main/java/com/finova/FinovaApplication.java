@@ -24,7 +24,32 @@ public class FinovaApplication {
     public static void main(String[] args) {
         loadDotEnv();
         configureSslTrustStore();
+        enforceProductionProfileOnCloud();
         SpringApplication.run(FinovaApplication.class, args);
+    }
+
+    /**
+     * Prevents accidental activation of the local 'h2' profile when running in cloud production (e.g. Render).
+     */
+    private static void enforceProductionProfileOnCloud() {
+        String isRender = System.getenv("RENDER");
+        String renderServiceId = System.getenv("RENDER_SERVICE_ID");
+        boolean onCloud = Boolean.parseBoolean(isRender) || (renderServiceId != null && !renderServiceId.isBlank());
+
+        String currentProfile = System.getProperty("spring.profiles.active");
+        if (currentProfile == null) {
+            currentProfile = System.getenv("SPRING_PROFILES_ACTIVE");
+        }
+
+        if (onCloud) {
+            if (currentProfile == null || "h2".equalsIgnoreCase(currentProfile) || currentProfile.isBlank()) {
+                log.warn("Render cloud deployment detected. Overriding active profile from '{}' to 'prod' for production.", currentProfile);
+                System.setProperty("spring.profiles.active", "prod");
+            }
+        } else if (currentProfile == null || currentProfile.isBlank()) {
+            // Default to 'prod' if nothing is configured
+            System.setProperty("spring.profiles.active", "prod");
+        }
     }
 
     private static void configureSslTrustStore() {
@@ -73,6 +98,14 @@ public class FinovaApplication {
     }
 
     private static void loadDotEnv() {
+        // Skip .env file loading in Render production cloud environment to prevent local config leakage
+        String isRender = System.getenv("RENDER");
+        String renderServiceId = System.getenv("RENDER_SERVICE_ID");
+        if (Boolean.parseBoolean(isRender) || (renderServiceId != null && !renderServiceId.isBlank())) {
+            log.info("Render production cloud environment detected. Skipping local .env file parsing.");
+            return;
+        }
+
         List<File> candidates = List.of(
                 new File(".env"),
                 new File("../.env"),
@@ -114,7 +147,8 @@ public class FinovaApplication {
                         }
                     }
 
-                    if (!value.isEmpty() && System.getProperty(key) == null) {
+                    // Never overwrite already-defined OS environment variables or Java system properties
+                    if (!value.isEmpty() && System.getProperty(key) == null && System.getenv(key) == null) {
                         System.setProperty(key, value);
                         loadedCount++;
                     }

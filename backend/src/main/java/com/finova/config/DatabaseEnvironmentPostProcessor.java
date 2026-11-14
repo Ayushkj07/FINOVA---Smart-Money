@@ -15,8 +15,8 @@ import java.util.Map;
 
 /**
  * Normalizes cloud provider database URLs (e.g., Render, Railway, AWS, PlanetScale).
- * Translates URI formats like 'mysql://user:pass@host:port/db' or 'postgresql://...' into
- * valid JDBC URLs ('jdbc:mysql://...' / 'jdbc:postgresql://...') and extracts credentials.
+ * Ensures that whenever a MySQL JDBC URL is present, MySQL driver and MySQLDialect
+ * are enforced and H2 profile settings are completely neutralized.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class DatabaseEnvironmentPostProcessor implements EnvironmentPostProcessor {
@@ -25,89 +25,91 @@ public class DatabaseEnvironmentPostProcessor implements EnvironmentPostProcesso
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        String rawUrl = environment.getProperty("SPRING_DATASOURCE_URL");
+        String rawUrl = environment.getProperty("spring.datasource.url");
+        if (rawUrl == null || rawUrl.isBlank()) {
+            rawUrl = environment.getProperty("SPRING_DATASOURCE_URL");
+        }
         if (rawUrl == null || rawUrl.isBlank()) {
             rawUrl = environment.getProperty("DATABASE_URL");
         }
 
-        if (rawUrl == null || rawUrl.isBlank()) {
-            return;
-        }
+        boolean onRender = Boolean.parseBoolean(environment.getProperty("RENDER")) ||
+                environment.getProperty("RENDER_SERVICE_ID") != null;
 
-        String trimmedUrl = rawUrl.trim();
         Map<String, Object> normalizedProps = new HashMap<>();
 
-        try {
-            if (trimmedUrl.startsWith("mysql://") || trimmedUrl.startsWith("mysqls://")) {
-                URI uri = new URI(trimmedUrl.replace("mysqls://", "mysql://"));
-                String host = uri.getHost();
-                int port = uri.getPort() == -1 ? 3306 : uri.getPort();
-                String path = uri.getPath() != null ? uri.getPath() : "/finova_db";
-                String query = uri.getQuery();
+        if (rawUrl != null && !rawUrl.isBlank()) {
+            String trimmedUrl = rawUrl.trim();
 
-                StringBuilder jdbcUrl = new StringBuilder("jdbc:mysql://")
-                        .append(host)
-                        .append(":")
-                        .append(port)
-                        .append(path);
+            try {
+                if (trimmedUrl.startsWith("mysql://") || trimmedUrl.startsWith("mysqls://")) {
+                    URI uri = new URI(trimmedUrl.replace("mysqls://", "mysql://"));
+                    String host = uri.getHost();
+                    int port = uri.getPort() == -1 ? 3306 : uri.getPort();
+                    String path = uri.getPath() != null ? uri.getPath() : "/finova_db";
+                    String query = uri.getQuery();
 
-                if (query != null && !query.isBlank()) {
-                    jdbcUrl.append("?").append(query);
-                } else {
-                    jdbcUrl.append("?useSSL=true&serverTimezone=UTC&allowPublicKeyRetrieval=true");
+                    StringBuilder jdbcUrl = new StringBuilder("jdbc:mysql://")
+                            .append(host)
+                            .append(":")
+                            .append(port)
+                            .append(path);
+
+                    if (query != null && !query.isBlank()) {
+                        jdbcUrl.append("?").append(query);
+                    } else {
+                        jdbcUrl.append("?useSSL=true&serverTimezone=UTC&allowPublicKeyRetrieval=true");
+                    }
+
+                    trimmedUrl = jdbcUrl.toString();
+                    normalizedProps.put("spring.datasource.url", trimmedUrl);
+
+                    if (uri.getUserInfo() != null && !uri.getUserInfo().isBlank()) {
+                        String[] userParts = uri.getUserInfo().split(":", 2);
+                        if (userParts.length > 0 && !userParts[0].isBlank() &&
+                                environment.getProperty("spring.datasource.username") == null) {
+                            normalizedProps.put("spring.datasource.username", userParts[0]);
+                        }
+                        if (userParts.length > 1 && !userParts[1].isBlank() &&
+                                environment.getProperty("spring.datasource.password") == null) {
+                            normalizedProps.put("spring.datasource.password", userParts[1]);
+                        }
+                    }
+                    log.info("Normalized cloud MySQL URI to standard JDBC format.");
                 }
 
-                normalizedProps.put("spring.datasource.url", jdbcUrl.toString());
+                // If URL is MySQL (or normalized to MySQL), enforce MySQL driver, dialect, and activate prod profile
+                if (trimmedUrl.startsWith("jdbc:mysql:")) {
+                    normalizedProps.put("spring.datasource.url", trimmedUrl);
+                    normalizedProps.put("spring.datasource.driver-class-name", "com.mysql.cj.jdbc.Driver");
+                    normalizedProps.put("spring.jpa.properties.hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+                    normalizedProps.put("spring.flyway.enabled", "true");
+                    normalizedProps.put("spring.h2.console.enabled", "false");
+                    normalizedProps.put("spring.profiles.active", "prod");
 
-                if (uri.getUserInfo() != null && !uri.getUserInfo().isBlank()) {
-                    String[] userParts = uri.getUserInfo().split(":", 2);
-                    if (userParts.length > 0 && !userParts[0].isBlank()) {
-                        normalizedProps.put("spring.datasource.username", userParts[0]);
-                    }
-                    if (userParts.length > 1 && !userParts[1].isBlank()) {
-                        normalizedProps.put("spring.datasource.password", userParts[1]);
-                    }
-                }
-                log.info("Normalized MySQL database connection string from cloud environment URI.");
-            } else if (trimmedUrl.startsWith("postgres://") || trimmedUrl.startsWith("postgresql://")) {
-                URI uri = new URI(trimmedUrl.replace("postgres://", "postgresql://"));
-                String host = uri.getHost();
-                int port = uri.getPort() == -1 ? 5432 : uri.getPort();
-                String path = uri.getPath() != null ? uri.getPath() : "/finova_db";
-                String query = uri.getQuery();
+                    // Activate 'prod' profile directly on the environment
+                    environment.addActiveProfile("prod");
 
-                StringBuilder jdbcUrl = new StringBuilder("jdbc:postgresql://")
-                        .append(host)
-                        .append(":")
-                        .append(port)
-                        .append(path);
-
-                if (query != null && !query.isBlank()) {
-                    jdbcUrl.append("?").append(query);
-                }
-
-                normalizedProps.put("spring.datasource.url", jdbcUrl.toString());
-
-                if (uri.getUserInfo() != null && !uri.getUserInfo().isBlank()) {
-                    String[] userParts = uri.getUserInfo().split(":", 2);
-                    if (userParts.length > 0 && !userParts[0].isBlank()) {
-                        normalizedProps.put("spring.datasource.username", userParts[0]);
-                    }
-                    if (userParts.length > 1 && !userParts[1].isBlank()) {
-                        normalizedProps.put("spring.datasource.password", userParts[1]);
+                    if (onRender && (trimmedUrl.contains("localhost") || trimmedUrl.contains("127.0.0.1"))) {
+                        log.error("=========================================================================================");
+                        log.error("FATAL CONFIGURATION ERROR ON RENDER:");
+                        log.error("The configured database URL is '{}'.", trimmedUrl);
+                        log.error("Render Web Services cannot connect to 'localhost:3306'. Render does not run MySQL inside containers.");
+                        log.error("Please configure an external managed MySQL database (e.g. Aiven, TiDB Cloud, Railway, AWS RDS)");
+                        log.error("and update 'SPRING_DATASOURCE_URL' in the Render Dashboard Environment tab.");
+                        log.error("=========================================================================================");
                     }
                 }
-                log.info("Normalized PostgreSQL database connection string from cloud environment URI.");
-            } else if (trimmedUrl.startsWith("jdbc:")) {
-                // Already standard JDBC format
-                normalizedProps.put("spring.datasource.url", trimmedUrl);
+            } catch (Exception ex) {
+                log.warn("Could not parse database URI '{}': {}", trimmedUrl, ex.getMessage());
             }
+        } else if (onRender) {
+            log.warn("No SPRING_DATASOURCE_URL or DATABASE_URL found in Render environment. Please configure database credentials.");
+            environment.addActiveProfile("prod");
+        }
 
-            if (!normalizedProps.isEmpty()) {
-                environment.getPropertySources().addFirst(new MapPropertySource("finovaNormalizedDataSource", normalizedProps));
-            }
-        } catch (Exception ex) {
-            log.warn("Could not normalize database URI '{}': {}", trimmedUrl, ex.getMessage());
+        if (!normalizedProps.isEmpty()) {
+            environment.getPropertySources().addFirst(new MapPropertySource("finovaNormalizedDataSource", normalizedProps));
         }
     }
 }

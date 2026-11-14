@@ -1,11 +1,10 @@
 # ==============================================================================
-# FINOVA – H2 Profile Configuration (Local Testing & In-Memory/File Standalone)
+# FINOVA – H2 Profile Configuration (Local Testing & Standalone Development)
 # Active when SPRING_PROFILES_ACTIVE=h2
 # ==============================================================================
 spring:
   datasource:
     url: ${SPRING_DATASOURCE_H2_URL:jdbc:h2:file:./data/finovadb;DB_CLOSE_DELAY=-1;MODE=MySQL;NON_KEYWORDS=YEAR,MONTH}
-    driver-class-name: org.h2.Driver
     username: sa
     password: ""
   flyway:
@@ -18,6 +17,3 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect

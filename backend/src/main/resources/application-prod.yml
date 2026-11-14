@@ -24,6 +24,10 @@ spring:
     validate-on-migrate: false
     table: flyway_schema_history
 
+  h2:
+    console:
+      enabled: false
+
   jpa:
     hibernate:
       ddl-auto: update

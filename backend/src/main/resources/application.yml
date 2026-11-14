@@ -20,6 +20,10 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:prod}
 
+  h2:
+    console:
+      enabled: false
+
   servlet:
     multipart:
       max-file-size: 10MB
