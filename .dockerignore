@@ -1,0 +1,9 @@
+**/target/
+**/.git/
+**/.env*
+**/*.log
+**/.mvn/
+**/data/
+**/*.mv.db
+frontend/node_modules/
+frontend/dist/

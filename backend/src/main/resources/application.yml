@@ -1,7 +1,17 @@
 server:
-  port: 8080
+  address: 0.0.0.0
+  port: ${PORT:${SERVER_PORT:8080}}
   servlet:
     context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    mail:
+      enabled: false
 
 spring:
   application:
@@ -42,9 +52,9 @@ spring:
     activate:
       on-profile: mysql
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/finova_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true}
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    url: ${SPRING_DATASOURCE_URL:${DATABASE_URL:jdbc:mysql://localhost:3306/finova_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DATABASE_USERNAME:${MYSQL_USER:root}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DATABASE_PASSWORD:${MYSQL_PASSWORD:root}}}
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
@@ -89,7 +99,7 @@ spring:
 ---
 app:
   jwt:
-    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970} # 256-bit secure secret key
+    secret: ${FINOVA_JWT_SECRET:${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}} # 256-bit secure secret key
     expiration-ms: 86400000 # 24 hours
     refresh-expiration-ms: 604800000 # 7 days
   cors:
